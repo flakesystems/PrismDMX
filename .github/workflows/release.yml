@@ -553,16 +553,24 @@ jobs:
       # the Windows one names `prismd.exe` and asks the bundler for an `nsis`
       # target, neither of which exists here.
       #
-      # The four `APPLE_*` variables are read by Tauri's bundler itself. When
-      # `APPLE_SIGNING_IDENTITY` is empty it signs nothing and says so, which is
-      # the unsigned path this job deliberately keeps working.
+      # **`APPLE_SIGNING_IDENTITY` and nothing else, so this step only signs.**
+      # Tauri's bundler notarises by itself the moment it is also given
+      # `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID` — and it was, which
+      # notarised the `.app` here and then the `.dmg` again two steps down.
+      # Two submissions for one release, of which only the second is any use:
+      # what an operator downloads is the disk image, and a stapled disk image
+      # already vouches for everything inside it.
+      #
+      # The first run this way sat in `Notarizing …` for **thirty-five
+      # minutes** before it was cancelled. That is the other half of the
+      # reason: Tauri's call is `--wait` with **no timeout**, so a slow or
+      # wedged submission would spend the job's full ninety minutes — on the
+      # runner billed at ten times a Linux one. The explicit step below passes
+      # `--timeout 30m` and gives up in words.
       - name: Build the bundle
         working-directory: crates/prism-app
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: ../../ui/node_modules/.bin/tauri build --config tauri.bundle.macos.conf.json
 
       # What a person is about to download, asked of the bundle itself. A
@@ -629,11 +637,13 @@ jobs:
           echo "the engine inside the bundle is signed, hardened and ours"
 
       # ---- Notarisation ----
-      # Tauri notarises the `.app` itself when the three `APPLE_*` credentials
-      # are present, but it does **not** staple the ticket to the `.dmg` — and
-      # an unstapled disk image is one that needs the network to open. So the
-      # `.dmg` is submitted and stapled here, which is also what makes the
-      # download work in a hall with no internet.
+      # **The one notarisation of the release, and it is the disk image's.**
+      # The step above is given no Apple ID, so Tauri signs and stops; this is
+      # where the `.dmg` is submitted, and a stapled disk image vouches for the
+      # `.app` inside it as well. Stapling is the part Tauri would not do even
+      # when it did notarise: an unstapled image needs the network every time
+      # somebody opens it, which in a hall with no internet is a file that does
+      # not open.
       - name: Notarise and staple the disk image
         if: steps.signing.outputs.notarising == 'true'
         env:
