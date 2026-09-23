@@ -1,7 +1,7 @@
 # PrismDMX — Handbuch für Entwickler
 
 **Für:** wer den Quelltext ändern will.
-**Gilt für:** `0.9.2`.
+**Gilt für:** `0.9.3`.
 **Zur Sprache:** Dieses Handbuch gibt es auf Deutsch und auf Englisch, aber
 **der Quelltext ist englisch** — jeder Bezeichner, jede Commit-Nachricht, jede
 Spezifikation. Wo dieses Handbuch einen Typ, eine Funktion oder einen Test

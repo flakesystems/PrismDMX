@@ -1,7 +1,7 @@
 # PrismDMX — Handbuch für den Operator
 
 **Für:** wer damit eine Show baut und fährt.
-**Gilt für:** Version `0.9.2`. Welche Version Sie haben, sagt *Settings → This
+**Gilt für:** Version `0.9.3`. Welche Version Sie haben, sagt *Settings → This
 machine*, und `prismd --version` sagt es auch.
 **Sprache:** Deutsch. Die Beschriftungen auf dem Bildschirm sind englisch, und
 sie stehen hier so, wie sie dort stehen — `Store`, `Clear`, *Fixture Sheet* —,

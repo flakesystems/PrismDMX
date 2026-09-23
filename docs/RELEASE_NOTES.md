@@ -1,3 +1,89 @@
+# PrismDMX 0.9.3 — the visualiser, a real fixture library, and a Mac
+
+The release the owner held back twice: once for the Controls round, once for a
+3D viewer that was turned down and rebuilt. It is the largest of the betas so
+far, and it changes three things an operator meets on the first evening — what
+the desk can be told about a fixture, what it shows you of the rig, and which
+computer it runs on.
+
+It is still a **pre-release**.
+
+## What changed since 0.9.2
+
+**The desk reads GDTF.** The Open Fixture Library describes *channels*; it does
+not say what a gobo looks like, how big a fixture is, where its beam leaves the
+body or which way the body points. [GDTF](https://gdtf.eu) — DIN SPEC 15800, the
+format manufacturers publish in — says all of it, and the desk now reads it
+whole: every DMX mode, the attribute names the maker chose, the physical ranges,
+the wheel slot pictures, the models. A venue's own copy of a published archive
+beats the installed one, whatever either is called. The Open Fixture Library
+stays for the profiles a venue writes by hand, and the two live side by side.
+
+**And four ways to get one onto the desk.** *Import rig (MVR)* takes your
+planner's rig file — the profiles **and** the patch, with number and address, in
+one step that one Oops takes back. *Import profile (GDTF)* takes a single
+`.gdtf` through the file dialogue. *Settings → This machine → GDTF Share* signs
+in with **your own** account and downloads the published library into **your
+own** folder. And a `.gdtf` or `.mvr` simply left in the fixture folder is a
+library too. Nothing is bundled and nothing is redistributed, which is a
+licensing decision written down with its sources in `docs/FIXTURE_LIBRARY.md`.
+
+**A window that shows the rig.** *Viewer 3D* draws every patched fixture where
+it hangs, as the thing it is — a GDTF device is drawn from the manufacturer's
+own models, with foot, yoke and head moved by pan and tilt — and a beam out of
+every lit one, in haze and where it lands on the floor. Dimmer, shutter, strobe
+and pulse, every colour the file names including warm and cold white, amber,
+lime, UV, CMY and colour temperature, zoom, focus, frost, iris, gobos and
+animation wheels as their own pictures, prisms and the blades. **Everything comes
+off the cable** — the same values as the DMX Sheet — so what you see is what the
+rig is actually being told, whoever told it. Fixtures are placed from the viewer
+itself, one Oops per gesture and no repatch. Four detail levels and a haze
+setting for older machines.
+
+**PrismDMX runs on macOS.** A signed, notarised `.dmg` beside the Windows
+installer — it opens with no right-click and no warning. An Open DMX USB adapter
+works there with no driver to install; the autostart box writes a LaunchAgent;
+the GDTF Share account is remembered in the login keychain. Nothing about
+Windows changed to get there.
+
+**A twelve-thousand-file library no longer holds the desk up.** Downloading all
+of GDTF Share used to mean the desk took over a minute to start and then did not
+start at all. The library is read in the background now, indexed between runs,
+and a profile's full device is fetched from its file when it is patched: **2.4 s
+to a listening desk** and 140 MB held, against 74 s and 1.8 GB.
+
+**And the frame rate got steadier everywhere.** Porting to macOS turned up that
+an operating system grants a sleeper slack in proportion to what it asks for, so
+the 44 Hz tick had been waking milliseconds late. It sleeps in short slices now:
+measured, the median lateness fell from 2.5 ms to under a microsecond. That holds
+on Windows too.
+
+Everything the open beta reported in its first weeks is in as well — ten issues,
+all closed — together with the Controls round: every console word can be put on
+an X-Touch key, a bound key lights up when pressing it would do something, the
+jog wheel moves a whole DMX step per click instead of a thirteenth, and the
+Controls page has a drawing of the desk with every key where it really is.
+`CHANGELOG.md` has the list.
+
+## Known, and deliberately shipped
+
+Two findings from the owner's rig test are **open** and this release does not
+wait for them, which is a decision rather than an oversight:
+
+- **B63** — the drawing of the X-Touch in the Controls panel does not match the
+  device in every detail. It is cosmetic and has a session of its own.
+- **B65** — a rig cannot be exported as MVR. Import works; export is not built.
+
+Two more things are worth knowing before you install:
+
+- **The macOS build has not been run against a real DMX adapter.** Everything
+  above it is tested, and the serial path is the one Apple ships a driver for,
+  but nobody has lit a lamp from a Mac with this build yet.
+- **An MVR plan's rotation is not read.** Imported fixtures hang where the plan
+  puts them and face the desk's default direction.
+
+---
+
 # PrismDMX 0.9.2 — the fixture library, whole
 
 Everything below started as something the owner tried to do with `0.9.1` and

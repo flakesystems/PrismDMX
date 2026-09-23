@@ -3,7 +3,7 @@
 **For:** whoever sets the desk up in a building — outputs, network, machine,
 autostart — not for whoever runs a show on it. That is the
 [operator's manual](operator.en.md).
-**Applies to:** version `0.9.2`.
+**Applies to:** version `0.9.3`.
 **A note on language:** this manual exists in English and German. Anything the
 program writes on screen, and anything that is a word on the command line, is
 given in English because that is what it says.
@@ -73,7 +73,7 @@ in a building without it, install the WebView2 runtime by hand beforehand.
 reasonable position in somebody else's building — check the checksum instead:
 
 ```powershell
-Get-FileHash .\PrismDMX_0.9.2_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\PrismDMX_0.9.3_x64-setup.exe -Algorithm SHA256
 ```
 
 and compare it with the one on the release page. That checksum is computed by the

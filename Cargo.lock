@@ -3367,7 +3367,7 @@ checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
 
 [[package]]
 name = "prism-app"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "prism-core",
  "prism-domain",
@@ -3385,7 +3385,7 @@ dependencies = [
 
 [[package]]
 name = "prism-core"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "flate2",
  "prism-domain",
@@ -3401,7 +3401,7 @@ dependencies = [
 
 [[package]]
 name = "prism-domain"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "proptest",
  "proptest-derive",
@@ -3413,7 +3413,7 @@ dependencies = [
 
 [[package]]
 name = "prism-engine"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "loom",
  "prism-domain",
@@ -3423,7 +3423,7 @@ dependencies = [
 
 [[package]]
 name = "prism-ipc"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "axum",
  "futures-util",
@@ -3438,14 +3438,14 @@ dependencies = [
 
 [[package]]
 name = "prism-midi"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "midir",
 ]
 
 [[package]]
 name = "prism-protocols"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "libftd2xx",
  "prism-domain",
@@ -3456,11 +3456,11 @@ dependencies = [
 
 [[package]]
 name = "prism-site"
-version = "0.9.2"
+version = "0.9.3"
 
 [[package]]
 name = "prism-surface"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "prism-domain",
  "proptest",
@@ -3470,7 +3470,7 @@ dependencies = [
 
 [[package]]
 name = "prism-web"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "pulldown-cmark",
  "sha2 0.10.9",
@@ -3478,7 +3478,7 @@ dependencies = [
 
 [[package]]
 name = "prismd"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "getrandom 0.4.3",
  "keyring",

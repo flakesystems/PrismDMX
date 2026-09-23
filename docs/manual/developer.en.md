@@ -1,7 +1,7 @@
 # PrismDMX — Developer's manual
 
 **For:** whoever is about to change the code.
-**Applies to:** `0.9.2`.
+**Applies to:** `0.9.3`.
 **Language:** English, because every identifier, commit message, specification
 and crate document in this repository is English and a German manual over them
 would be a translation layer between a reader and the thing they are editing.

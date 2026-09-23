@@ -4,7 +4,7 @@
 project signs with. It is a setup document, not something an operator or an
 installer ever reads — they get a `.dmg` that opens, which is the whole point of
 it.
-**Applies to:** version `0.9.2` and later, on macOS 11 and later.
+**Applies to:** version `0.9.3` and later, on macOS 11 and later.
 **Added by:** S63, the session that made the desk build on a Mac.
 
 > **The short version.** You need a **Developer ID Application** certificate and
@@ -667,7 +667,7 @@ bundle will be rejected by notarisation, and §7 is where the fix is.
 one of the four that answers it:
 
 ```bash
-spctl --assess --type open --context context:primary-signature -vv target/release/bundle/dmg/PrismDMX_0.9.2_aarch64.dmg
+spctl --assess --type open --context context:primary-signature -vv target/release/bundle/dmg/PrismDMX_0.9.3_aarch64.dmg
 ```
 
 `source=Notarized Developer ID` and `accepted`. `source=Developer ID` without

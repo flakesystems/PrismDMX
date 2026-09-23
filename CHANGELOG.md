@@ -20,11 +20,18 @@ Alle Versionen bisher sind **Vorabversionen**.
 
 ---
 
-## Noch nicht veröffentlicht
+## 0.9.3 — der Visualizer, eine echte Bibliothek und der Mac
 
-**Diese Änderungen erscheinen als 0.9.3.** Die Version steht noch nicht auf dem
-Programm — der Eigentümer hielt das Release zurück, bis die Controls-Änderungen
-(S59) und der 3D-Viewer (S30) mit drin sind, und beide sind es jetzt.
+Die größte der Vorabversionen bisher. Der Eigentümer hielt sie zweimal zurück:
+einmal für die Controls-Runde (S59), einmal für einen 3D-Viewer, der abgelehnt
+und neu gebaut wurde (S30, S30b). Dazu kommt die Fixture-Bibliothek in GDTF
+(S61) mit vier Wegen, sie zu füllen (S62), und **macOS als zweite Plattform**
+(S63).
+
+**Zwei Befunde der Rig-Abnahme sind bewusst offen geblieben**: B63 (die
+Zeichnung des Pults im Controls-Menü stimmt nicht in jedem Detail) und B65
+(ein Rig lässt sich nicht als MVR exportieren). Beide sind kosmetisch
+beziehungsweise eine fehlende Funktion, keine Fehlfunktion im Betrieb.
 
 ### Der 3D-Visualizer (S30, S30b)
 

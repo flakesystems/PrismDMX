@@ -22,11 +22,17 @@ Every version so far is a **pre-release**.
 
 ---
 
-## Not yet released
+## 0.9.3 — the visualiser, a real fixture library, and a Mac
 
-**These changes ship as 0.9.3.** The version is not on the program yet — the
-owner held the release until the Controls round (S59) and the 3D viewer (S30)
-were in it, and both now are.
+The largest of the pre-releases so far. The owner held it back twice: once for
+the Controls round (S59), once for a 3D viewer that was turned down and rebuilt
+(S30, S30b). With it come the fixture library in GDTF (S61) and four ways to
+fill it (S62), and **macOS as a second platform** (S63).
+
+**Two findings from the rig test are deliberately left open**: B63 (the drawing
+of the desk in the Controls panel does not match the device in every detail)
+and B65 (a rig cannot be exported as MVR). One is cosmetic, the other a missing
+function — neither is a fault in operation.
 
 ### The 3D visualiser (S30, S30b)
 
