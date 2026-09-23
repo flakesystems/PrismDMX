@@ -57,6 +57,8 @@
 #![allow(clippy::print_stdout)]
 
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use prism_core::{SessionMirror, ShowMirror};
@@ -128,28 +130,6 @@ async fn next_event(client: &mut Client) -> Option<ClientEvent> {
         Ok(Some(Err(error))) => panic!("the connection reported {error}"),
         Ok(None) | Err(_) => None,
     }
-}
-
-/// Reads whatever is already waiting for this client, and nothing more.
-///
-/// **A "fast client" is one that is being read**, and a client nobody is
-/// polling is indistinguishable from one that has stopped reading — which is
-/// the whole subject of the backpressure gate, and which the first version of
-/// that test got wrong: while it waited for the *slow* client to fall behind, it
-/// was not reading the fast one either, so on a CI runner both had dropped
-/// exactly 28 telemetry frames and the comparison between them said nothing.
-/// The deadline is short because "already waiting" is the question; a client
-/// with nothing to read answers in a millisecond.
-async fn drain_ready(client: &mut Client) -> usize {
-    let mut read = 0;
-    while read < 64 {
-        match tokio::time::timeout(Duration::from_millis(1), client.next_event()).await {
-            Ok(Some(Ok(_))) => read += 1,
-            Ok(Some(Err(error))) => panic!("the connection reported {error}"),
-            Ok(None) | Err(_) => break,
-        }
-    }
-    read
 }
 
 /// Sends a command and waits for its `Ack`, applying everything that arrives on
@@ -659,15 +639,51 @@ async fn a_slow_client_loses_telemetry_and_no_commands_and_nobody_else_notices()
     // has anything to say about. Scale-free on purpose — it is a statement
     // about the client being behind, not about how big a pipe buffer is on
     // whichever operating system this is running on.
+    // **A "fast client" is one that is being read, and this is where that is
+    // made true.** A client nobody is polling is indistinguishable from one
+    // that has stopped reading, which is the whole subject of this gate — and
+    // the test has now got it wrong twice in the same shape. The first version
+    // did not read the fast client at all while it waited, and a CI runner had
+    // both of them at exactly 28 frames dropped. The second read it *between*
+    // turns of this wait, one drain of whatever had already arrived every five
+    // milliseconds; v0.9.3's macOS job answered 26 against 27, which is the
+    // same nothing said a second time.
+    //
+    // The flaw in both is that the fast client was only ever as fast as this
+    // loop, and this loop also asks the daemon for statistics and sleeps. On a
+    // three-core runner executing every test binary at once, seconds pass
+    // between its turns, and a second of not reading at 30 Hz is a client that
+    // has fallen behind — which is the definition of the *slow* one.
+    //
+    // So the fast client is read by a task that does nothing else and waits on
+    // the socket rather than on a timer. It hands the client back when the
+    // flag is cleared; the loop it is in turns at telemetry rate, so that
+    // happens within a frame and nothing is cancelled mid-read.
+    let reading = Arc::new(AtomicBool::new(true));
+    let read_on = Arc::clone(&reading);
+    let reader = tokio::spawn(async move {
+        while read_on.load(Ordering::Relaxed) {
+            match fast.next_event().await {
+                Some(Ok(_)) => {}
+                Some(Err(error)) => panic!("the connection reported {error}"),
+                None => break,
+            }
+        }
+        fast
+    });
+
     until("the slow client to fall behind the telemetry", async || {
-        // The fast client is read on every turn of this wait, because that is
-        // the only thing that makes it the fast one. See `drain_ready`.
-        drain_ready(&mut fast).await;
         server.stats(slow_id).await.is_some_and(|stats| {
             stats.telemetry_dropped > stats.telemetry_sent && stats.telemetry_dropped >= 20
         })
     })
     .await;
+
+    reading.store(false, Ordering::Relaxed);
+    let mut fast = tokio::time::timeout(PATIENCE, reader)
+        .await
+        .expect("the fast client's reader must stop when it is told to")
+        .expect("the fast client's reader");
     assert_eq!(
         server.client_count().await,
         2,
@@ -698,15 +714,26 @@ async fn a_slow_client_loses_telemetry_and_no_commands_and_nobody_else_notices()
 
     let slow_stats = server.stats(slow_id).await.expect("still connected");
     let fast_stats = server.stats(fast_id).await.expect("still connected");
-    // A ratio rather than "fewer": the claim is that the fast client is not
-    // behind *in the way the slow one is*, and one frame lost to a scheduler
-    // hiccup on a busy runner is not that. With the slow client at twenty or
-    // more, this leaves the fast one at most four.
+    // **The mirror image of the slow client's own condition, rather than a
+    // ratio between the two.** What the wait above established about the slow
+    // one is that it dropped *more than it was given*, twenty frames at least;
+    // the claim about the fast one is the same sentence the other way round,
+    // and that is what "not behind in the way the slow one is" means.
+    //
+    // It is deliberately not `fast_dropped * 4 < slow_dropped`, which is what
+    // stood here and what v0.9.3's macOS job failed at 26 against 27. That
+    // compares two clients' *throughput*, so a stall in the runner that starves
+    // the whole test moves both numbers together and the comparison fails on a
+    // daemon that did nothing wrong. This one is per-client and scale-free: a
+    // client that received a hundred frames and lost twenty-six to a stall is
+    // not the client this test is about, and one that received nothing and lost
+    // everything is.
     assert!(
-        fast_stats.telemetry_dropped * 4 < slow_stats.telemetry_dropped,
-        "the fast client dropped {} telemetry frames and the slow one {}",
-        fast_stats.telemetry_dropped,
-        slow_stats.telemetry_dropped
+        fast_stats.telemetry_sent > fast_stats.telemetry_dropped && fast_stats.telemetry_sent >= 20,
+        "the fast client was given {} telemetry frames and dropped {}, which is the slow \
+         client's own shape rather than a client that is being read",
+        fast_stats.telemetry_sent,
+        fast_stats.telemetry_dropped
     );
     assert!(
         fast_stats.control_high_water < slow_stats.control_high_water,
