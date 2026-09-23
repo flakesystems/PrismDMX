@@ -42,8 +42,10 @@
 # **And it builds the site but does not deploy it** — S42. The download page's
 # checksum is computed from the installer rather than transcribed, so the only
 # run that can produce that page is the one that has just built the file: the
-# Windows job generates it and uploads it as the `prismdmx-site` artefact.
-# `pages.yml` takes that artefact and deploys it when this workflow finishes.
+# Windows job generates it and uploads it as the `prismdmx-site-release`
+# artefact — named apart from `ci.yml`'s own `prismdmx-site`, which is built
+# without a checksum and lands in this same run. `pages.yml` takes it and
+# deploys it when this workflow finishes.
 #
 # **Why the deployment is not a job here, since it once was.** Two reasons, and
 # the second is the one that decided it. A release job that could write Pages
@@ -338,10 +340,26 @@ jobs:
       # A plain artefact, not a Pages one. `upload-pages-artifact` builds a tar
       # the Pages service expects and is a Linux action; this job is on Windows
       # because that is where the installer it hashed came from. So the pages
-      # artefact is made in the job below, out of these files.
+      # artefact is made by `pages.yml`, out of these files.
+      #
+      # **`-release` on the end, and it is not decoration.** `release.yml` calls
+      # `ci.yml`, whose `web` job uploads a site of its own — built with no
+      # `--installer`, because a Linux gate has no `.exe` to hash — and a
+      # reusable workflow's artefacts land in the **calling run**. Both were
+      # called `prismdmx-site`, so a release run carried two artefacts of one
+      # name, one with the checksum on the download page and one without, and
+      # `download-artifact` picked between them by an undocumented tie-break:
+      # the newest wins, which happened to be this one because the Windows job
+      # `needs: linux` and therefore always finishes later.
+      #
+      # It worked, and it was luck standing where a name should be. A download
+      # page whose checksum silently went missing is exactly the failure S42
+      # built the `--installer` path to prevent, and it would have been visible
+      # to nobody: the page renders, the job is green, and the row is simply
+      # not there.
       - uses: actions/upload-artifact@v4
         with:
-          name: prismdmx-site
+          name: prismdmx-site-release
           path: docs-site
           retention-days: 14
 

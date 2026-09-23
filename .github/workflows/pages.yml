@@ -19,8 +19,9 @@
 # computed from the installer, and the only run that has an installer is the one
 # that just built it — so `release.yml` generates the site with `--installer`
 # pointing at the `.exe` it is about to attach, and uploads it as the
-# `prismdmx-site` artefact. This workflow deploys that artefact rather than
-# rebuilding, which is how the number on the page stays the number of the file.
+# `prismdmx-site-release` artefact. This workflow deploys that artefact rather
+# than rebuilding, which is how the number on the page stays the number of the
+# file.
 #
 # **It is reached by `workflow_run` and not by the tag**, and that is a
 # repository setting rather than a preference. The `github-pages` environment
@@ -114,7 +115,11 @@ jobs:
         if: github.event_name == 'workflow_run'
         uses: actions/download-artifact@v4
         with:
-          name: prismdmx-site
+          # **`-release`, and never plain `prismdmx-site`.** A release run holds
+          # both: `ci.yml`'s, built on Linux with no installer to hash, and the
+          # Windows job's, with the checksum on the download page. They had the
+          # same name until 2026-09-23 and this step chose by which was newer.
+          name: prismdmx-site-release
           path: docs-site
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
