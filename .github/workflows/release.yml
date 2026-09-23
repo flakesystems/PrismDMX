@@ -644,6 +644,24 @@ jobs:
       # when it did notarise: an unstapled image needs the network every time
       # somebody opens it, which in a hall with no internet is a file that does
       # not open.
+      # **Uploaded before the notarisation, and that ordering is the point.**
+      # The signed image is finished work: twenty-five minutes of build and a
+      # signature that `Verify the signature` has already checked. Apple's
+      # notary service is the one part of this job that can take an
+      # unpredictable time — the v0.9.3 run sat `In Progress` for the full
+      # thirty minutes — and a timeout there used to throw the image away with
+      # it. Now a timed-out run still leaves a downloadable artefact, and a
+      # ticket that finishes later can be stapled onto it by hand
+      # (`xcrun stapler staple`) without building anything again.
+      #
+      # It is **not** attached to the release here: what goes on a release page
+      # is stapled or it is not offered.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prismdmx-macos
+          path: target/release/bundle/dmg/*.dmg
+          retention-days: 14
+
       - name: Notarise and staple the disk image
         if: steps.signing.outputs.notarising == 'true'
         env:
@@ -664,11 +682,25 @@ jobs:
             exit 1
           fi
           dmg="${images[0]}"
-          xcrun notarytool submit "$dmg" \
+          # **The submission id is the thing to keep when this times out.**
+          # A wait that runs out is not a rejection: the upload succeeded and
+          # Apple is still working. With the id, the verdict can be read later
+          # (`xcrun notarytool log <id> …`) and the image stapled without
+          # building it again — which is what the artefact above is for.
+          if ! xcrun notarytool submit "$dmg" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
             --wait --timeout 30m
+          then
+            # Single quotes: the text names shell commands, and in double
+            # quotes their backticks would be run instead of printed. That is
+            # the whole reason nothing here expands, so the warning about it is
+            # the intent rather than a fault.
+            # shellcheck disable=SC2016
+            echo '::error::notarisation did not finish inside 30 minutes. This is a wait that ran out, not a rejection. The signed disk image is uploaded as the prismdmx-macos artefact; read the verdict with `xcrun notarytool log <the id printed above>` and staple it with `xcrun stapler staple` rather than building it again.'
+            exit 1
+          fi
           xcrun stapler staple "$dmg"
           xcrun stapler validate "$dmg"
           # The last word belongs to Gatekeeper rather than to us: this is the
@@ -699,13 +731,6 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "$(basename "$dmg")  $hash"
 
-      # Always, tag or not: a `workflow_dispatch` run exists to produce exactly
-      # this and to create nothing.
-      - uses: actions/upload-artifact@v4
-        with:
-          name: prismdmx-macos
-          path: target/release/bundle/dmg/*.dmg
-          retention-days: 14
 
       # The disk image is **added** to the release the Windows job created, not
       # a release of its own. `softprops/action-gh-release` updates an existing
