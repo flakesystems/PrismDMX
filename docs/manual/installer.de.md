@@ -3,7 +3,7 @@
 **Für:** wer das Pult in einem Haus einrichtet — Ausgänge, Netz, Maschine,
 Autostart —, nicht für den, der damit eine Show fährt. Dafür gibt es das
 [Operator-Handbuch](operator.de.md).
-**Gilt für:** Version `0.9.2`.
+**Gilt für:** Version `0.9.3`.
 **Sprache:** Deutsch. Alles, was das Programm auf den Bildschirm schreibt oder
 auf der Kommandozeile heißt, steht englisch da, wo es englisch ist.
 
@@ -75,7 +75,7 @@ per Klick übergehen wollen — eine vernünftige Haltung in einem fremden Haus 
 prüfen Sie stattdessen die Prüfsumme:
 
 ```powershell
-Get-FileHash .\PrismDMX_0.9.2_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\PrismDMX_0.9.3_x64-setup.exe -Algorithm SHA256
 ```
 
 und vergleichen Sie sie mit der auf der Release-Seite. Die dortige Prüfsumme

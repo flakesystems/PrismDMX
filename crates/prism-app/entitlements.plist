@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The hardened runtime's exceptions, and there are as few of them as the desk
+  can be made to need — S63.
+
+  Signing with a Developer ID turns the hardened runtime on, and notarisation
+  requires it. Every key below is an *exception* to it, so each one is a small
+  hole in the thing that is being asked for, and the list is short on purpose:
+  `docs/manual/apple_developer_signing.md` §7 is where a new one has to argue
+  for itself before it is added.
+
+  What is deliberately **absent** is worth as much as what is here:
+
+  * **No App Sandbox** (`com.apple.security.app-sandbox`). A sandboxed desk
+    could not open a show file the operator points it at, could not reach an
+    Art-Net node on the local network without a further entitlement, and could
+    not spawn `prismd` at all. The App Sandbox is required for the Mac App
+    Store and not for Developer ID distribution, which is what this ships as.
+  * **No `disable-library-validation`.** Everything the bundle loads is signed
+    by the same team, which is precisely the condition library validation
+    checks. A desk that switched it off would be one that could be made to load
+    somebody else's code.
+  * **No network entitlements.** Those are App Sandbox keys. Outside the
+    sandbox the daemon binds its loopback listener and reaches a lighting
+    network without asking anyone.
+-->
+<plist version="1.0">
+<dict>
+	<!--
+	  WebKit compiles JavaScript, and the interface is JavaScript. The web
+	  content itself runs in Apple's own out-of-process `WKWebView` helper,
+	  which is why this is the only memory-related exception here and why the
+	  two blunter ones beside it in most guides — `allow-unsigned-executable-memory`
+	  and `allow-dyld-environment-variables` — are not.
+	-->
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+</dict>
+</plist>

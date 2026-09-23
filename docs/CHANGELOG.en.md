@@ -22,11 +22,17 @@ Every version so far is a **pre-release**.
 
 ---
 
-## Not yet released
+## 0.9.3 — the visualiser, a real fixture library, and a Mac
 
-**These changes ship as 0.9.3.** The version is not on the program yet — the
-owner held the release until the Controls round (S59) and the 3D viewer (S30)
-were in it, and both now are.
+The largest of the pre-releases so far. The owner held it back twice: once for
+the Controls round (S59), once for a 3D viewer that was turned down and rebuilt
+(S30, S30b). With it come the fixture library in GDTF (S61) and four ways to
+fill it (S62), and **macOS as a second platform** (S63).
+
+**Two findings from the rig test are deliberately left open**: B63 (the drawing
+of the desk in the Controls panel does not match the device in every detail)
+and B65 (a rig cannot be exported as MVR). One is cosmetic, the other a missing
+function — neither is a fault in operation.
 
 ### The 3D visualiser (S30, S30b)
 
@@ -71,6 +77,30 @@ Sheet — so what you see is what the rig is actually being told, whoever told i
 - **Fixed:** a value set in the very moment the rig was rebuilt — just after a
   patch or an Oops, say — could be missing from the output although the
   programmer had it. It always arrives now.
+
+### PrismDMX runs on the Mac (S63)
+
+**The desk builds, runs and ships on macOS** — as a signed `.dmg` beside the
+Windows installer. Nothing about Windows changed: every platform-specific place
+gained a macOS branch **beside** the Windows one, and none was replaced.
+
+- **Open DMX USB works on a Mac.** An FT232R appears there as a serial port on
+  its own, with no driver to install — plugging it in is the whole setup.
+  (Windows still prefers D2XX.)
+- **Autostart on a Mac**: the box in *Settings → This machine* writes a
+  **LaunchAgent**, where Windows writes a registry value. No administrator
+  rights, and the line underneath still says what the machine actually has.
+- **A Mac remembers the GDTF Share account in the login keychain**, as Windows
+  remembers it in the credential manager. Never in a settings file.
+- **The frame rate on a Mac is as steady as it is on Windows.** Porting turned
+  up that macOS grants a long sleep more slack than a short one, so the 44 Hz
+  tick was waking milliseconds late. The tick now sleeps in short slices;
+  measured, the median lateness fell from 2.5 ms to under a microsecond. **That
+  holds on every platform.**
+
+The `.dmg` is notarised by Apple: it opens with no right-click and no warning.
+
+---
 
 ### The fixture library is GDTF now (S61)
 

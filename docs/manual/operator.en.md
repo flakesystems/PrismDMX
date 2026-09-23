@@ -1,7 +1,7 @@
 # PrismDMX — Operator's manual
 
 **For:** whoever builds and runs a show with it.
-**Applies to:** version `0.9.2`. Which version you have is in *Settings → This
+**Applies to:** version `0.9.3`. Which version you have is in *Settings → This
 machine*, and `prismd --version` says it too.
 **A note on language:** this manual exists in English and German. The labels on
 screen are English, and they are given here exactly as they appear there —

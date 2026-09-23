@@ -526,10 +526,33 @@ async fn an_output_whose_device_disappears_degrades_alone() {
         ticks_after > ticks_before,
         "the engine noticed a driver's fault"
     );
-    assert_eq!(
-        daemon.desk().core().engine().health().missed(),
-        missed_before,
-        "and it did not miss a tick over it"
+    // **The share of the grid that ran, not a missed-tick budget of nought** —
+    // S63, and it is `tests/realtime.rs`'s own remedy applied one crate along.
+    //
+    // This used to assert `missed == missed_before`: *not one tick lost in
+    // 300 ms*. That is a statement about the machine rather than about the
+    // fault. A GitHub macOS runner — three virtual cores, every test binary at
+    // once — lost exactly one, and the test went red on a panic it had handled
+    // perfectly.
+    //
+    // What a fault on the **tick path** would look like is not one tick: it is
+    // the grid stopping, and three quarters is what an engine that can no
+    // longer keep up destroys. A driver's panic is caught on the driver's own
+    // thread, so the claim this test makes — *degrades alone* — is the two
+    // assertions above, that every other output kept being fed and that the
+    // engine kept ticking. This one guards the shape of the failure.
+    let ran = ticks_after.saturating_sub(ticks_before);
+    let lost = daemon
+        .desk()
+        .core()
+        .engine()
+        .health()
+        .missed()
+        .saturating_sub(missed_before);
+    assert!(
+        lost * 4 <= ran,
+        "the grid lost {lost} of {ran} ticks while one output panicked, which is \
+         a fault reaching the tick rather than staying on the driver's thread"
     );
 
     daemon.shutdown().await;

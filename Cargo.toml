@@ -30,7 +30,20 @@ members = ["crates/*", "web", "site"]
 # serialises back byte for byte. `AttributeType` grew from 34 rows to 41, all of
 # them **appended**, which is what keeps the first page of every encoder bank
 # what it was.
-version = "0.9.2"
+# 0.9.3 is **the visualiser, a real fixture library, and a second platform**,
+# and it is the first release since 0.9.0 whose patch digit is a claim this
+# document cannot make on its own. A show written by 0.9.2 still opens: every
+# field S61, S62 and S30b added is `#[serde(default, skip_serializing_if = …)]`,
+# including a fixture's embedded GDTF device (`FixturePhysical`), so a profile
+# from before reads as a device with no geometry and nothing else moves. What is
+# genuinely new is what a desk can be *told* — GDTF and MVR — and what it can
+# *show*, neither of which changes the file.
+#
+# It is also the first version to name two operating systems (S63). The macOS
+# build is the same code: no Windows arm was replaced to get it, and the one
+# change that touches every platform — the tick sleeping in slices — makes the
+# frame rate steadier on all of them.
+version = "0.9.3"
 edition = "2024"
 # Raised from 1.85 in S17. `std::fs::File::try_lock` was stabilised in 1.89 and
 # it is what `prismd` uses for the single-instance guarantee: an advisory lock

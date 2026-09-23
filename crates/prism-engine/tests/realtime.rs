@@ -351,11 +351,21 @@ fn the_tick_holds_its_deadline_for_a_few_seconds() {
     // documentation-only commit at 16 ms, was loosened to one whole tick period
     // — and failed again two commits later at 210 ms, on a commit that touched
     // no code in this crate, with the median still at 100 µs and the identical
-    // tree green on a rerun. That run printed `probe thread turns: 0/s`: the
-    // machine had no core to spare at all, which is the precondition of the
-    // measurement rather than a property of the schedule. `cargo test` runs the
-    // workspace's test binaries in parallel, so every target a later session
-    // adds is another thing this three-second window is measuring.
+    // tree green on a rerun.
+    //
+    // **That paragraph used to end by reading something into `probe thread
+    // turns: 0/s`, and S63 found that the number meant nothing.** This test
+    // calls `measure`, which sets `probe: false` — the probe thread is never
+    // spawned here, so the counter is trivially zero on every machine, idle or
+    // starved. The conclusion was right for other reasons and the evidence
+    // offered for it was not; it is struck rather than quietly repaired,
+    // because the next person to meet a red timing test will look here first.
+    // (S63 did, and built a guard on the zero before noticing.)
+    //
+    // What remains true without it: `cargo test` runs the workspace's test
+    // binaries in parallel, so every target a later session adds is another
+    // thing this three-second window is measuring, and the window has no way
+    // to tell a busy machine from a quiet one.
     //
     // A percentile is only a gate where the sample count supports it. p95 over
     // ~130 samples is the seventh-worst one, and on a shared two-core runner the

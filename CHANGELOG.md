@@ -20,11 +20,18 @@ Alle Versionen bisher sind **Vorabversionen**.
 
 ---
 
-## Noch nicht veröffentlicht
+## 0.9.3 — der Visualizer, eine echte Bibliothek und der Mac
 
-**Diese Änderungen erscheinen als 0.9.3.** Die Version steht noch nicht auf dem
-Programm — der Eigentümer hielt das Release zurück, bis die Controls-Änderungen
-(S59) und der 3D-Viewer (S30) mit drin sind, und beide sind es jetzt.
+Die größte der Vorabversionen bisher. Der Eigentümer hielt sie zweimal zurück:
+einmal für die Controls-Runde (S59), einmal für einen 3D-Viewer, der abgelehnt
+und neu gebaut wurde (S30, S30b). Dazu kommt die Fixture-Bibliothek in GDTF
+(S61) mit vier Wegen, sie zu füllen (S62), und **macOS als zweite Plattform**
+(S63).
+
+**Zwei Befunde der Rig-Abnahme sind bewusst offen geblieben**: B63 (die
+Zeichnung des Pults im Controls-Menü stimmt nicht in jedem Detail) und B65
+(ein Rig lässt sich nicht als MVR exportieren). Beide sind kosmetisch
+beziehungsweise eine fehlende Funktion, keine Fehlfunktion im Betrieb.
 
 ### Der 3D-Visualizer (S30, S30b)
 
@@ -71,6 +78,33 @@ DMX Sheet —, also sieht man, was dem Rig tatsächlich gesagt wird, egal von we
   neu aufgebaut wurde — etwa gleich nach einem Patch oder einem Oops —, konnte
   auf dem Ausgang fehlen, obwohl der Programmer ihn hatte. Er kommt jetzt immer
   an.
+
+### PrismDMX läuft jetzt auf dem Mac (S63)
+
+**Das Pult baut, läuft und wird auf macOS ausgeliefert** — als signierte `.dmg`
+neben dem Windows-Installer. Für Windows ändert sich nichts: jede
+plattformspezifische Stelle hat einen macOS-Zweig **neben** der Windows-Variante
+bekommen, keine wurde ersetzt.
+
+- **Open DMX USB funktioniert am Mac.** Ein FT232R meldet sich dort von selbst
+  als serieller Port, ohne dass irgendein Treiber installiert werden muss —
+  einstecken genügt. (Windows benutzt weiterhin zuerst D2XX.)
+- **Autostart am Mac**: der Haken in *Settings → This machine* legt einen
+  **LaunchAgent** an, wie er unter Windows einen Registry-Eintrag anlegt. Keine
+  Administratorrechte, und die Zeile darunter sagt weiterhin, was die Maschine
+  wirklich hat.
+- **Das GDTF-Share-Konto merkt sich der Mac im Schlüsselbund**, so wie Windows
+  es in der Anmeldeinformationsverwaltung tut. Nie in einer Einstellungsdatei.
+- **Die Bildrate ist am Mac so ruhig wie unter Windows.** Beim Portieren kam
+  heraus, dass macOS einen langen Schlaf großzügiger auslegt als einen kurzen,
+  wodurch der 44-Hz-Takt um Millisekunden zu spät aufwachte. Der Takt schläft
+  jetzt in kurzen Abschnitten; gemessen fiel der mittlere Versatz von 2,5 ms auf
+  unter eine Mikrosekunde. **Das gilt auf allen Plattformen.**
+
+Wer die `.dmg` lädt, bekommt sie von Apple beglaubigt: sie öffnet sich ohne den
+Rechtsklick-Umweg und ohne Warnung.
+
+---
 
 ### Die Fixture-Bibliothek ist jetzt GDTF (S61)
 

@@ -3,10 +3,12 @@
 //!
 //! `ARCHITECTURE_SPEC.md` §7.1 gives Windows two ways to reach an FT232R —
 //! **D2XX** first, the **virtual COM port** as a fallback for a machine where
-//! FTDI's own driver is not installed — and Linux exactly one, libftdi. That is
-//! a policy, and a policy is testable: [`FallbackFtdi`] is generic over the two
-//! backends, so "try the preferred one, fall back to the other, remember which
-//! answered" is checked against two mocks with no cable in the building.
+//! FTDI's own driver is not installed — Linux exactly one, libftdi, and
+//! **macOS exactly one, the virtual COM port** (S63; [`system_backend`] says
+//! why the Windows fallback is the macOS default). That is a policy, and a
+//! policy is testable: [`FallbackFtdi`] is generic over the two backends, so
+//! "try the preferred one, fall back to the other, remember which answered" is
+//! checked against two mocks with no cable in the building.
 //!
 //! What is *not* testable without hardware is each backend's handful of library
 //! calls. Those live in [`d2xx`](crate::d2xx) and [`vcp`](crate::vcp), are kept
@@ -156,9 +158,32 @@ impl FtdiBackend for UnsupportedBackend {
 
 /// The cable this platform reaches an adapter through.
 ///
-/// Windows: D2XX, falling back to the virtual COM port. Anywhere else:
-/// [`UnsupportedBackend`], until a machine exists to verify a libftdi backend
-/// on — `ARCHITECTURE_SPEC.md` §7.1 names the path and D10 names the machine.
+/// Windows: D2XX, falling back to the virtual COM port. **macOS: the virtual
+/// COM port, and only that** — see below. Anywhere else: [`UnsupportedBackend`],
+/// until a machine exists to verify a libftdi backend on —
+/// `ARCHITECTURE_SPEC.md` §7.1 names the path and D10 names the machine.
+///
+/// # Why macOS has one path where Windows has two — S63
+///
+/// An FT232R appears on macOS as `/dev/cu.usbserial-…` the moment it is
+/// plugged in: Apple ships the virtual COM port driver in the operating
+/// system, so the *fallback* path on Windows is the path that is always there
+/// here, with nothing to install. D2XX is the opposite way round — FTDI's
+/// library can only claim the device once Apple's own driver has been unloaded,
+/// which is a kernel extension a school cannot be asked to touch and which
+/// takes the port away from every other program while it is unloaded.
+///
+/// So the choice is not *prefer D2XX and fall back*, it is *there is one path*,
+/// and [`AccessPath::fallback`] says `None` for the same reason it does on
+/// Linux. What that costs is what `vcp.rs` documents: the FTDI latency timer is
+/// out of reach, so a frame leaves when the arithmetic in
+/// `VcpBackend::write` says it has and not before.
+///
+/// `VcpBackend` is deliberately **not linked** here, and neither is
+/// `D2xxBackend`: both are `#[cfg]`-gated and this function is not, so a
+/// link to either resolves on the platform that has it and fails the
+/// documentation build on the one that does not. The Linux `cargo doc`
+/// gate is what says so.
 #[must_use]
 pub fn system_backend() -> Box<dyn FtdiBackend> {
     #[cfg(windows)]
@@ -168,7 +193,18 @@ pub fn system_backend() -> Box<dyn FtdiBackend> {
             Some((AccessPath::Vcp, crate::vcp::VcpBackend::new())),
         ))
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // `FallbackFtdi` with no fallback rather than a bare `VcpBackend`, so
+        // that `in_use()` answers on this platform too: a log line saying which
+        // path carried the show is the thing S8 was asked to record, and a
+        // backend that cannot say is a backend that reports nothing.
+        Box::new(FallbackFtdi::new(
+            (AccessPath::Vcp, crate::vcp::VcpBackend::new()),
+            None::<(AccessPath, UnsupportedBackend)>,
+        ))
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         Box::new(UnsupportedBackend)
     }
@@ -189,7 +225,13 @@ pub fn list_devices() -> Result<Vec<AttachedDevice>, FtdiError> {
     {
         crate::d2xx::list_devices()
     }
-    #[cfg(not(windows))]
+    // The same enumeration the one access path uses, which is what keeps
+    // "is the adapter there?" and "can it be opened?" the same question — S63.
+    #[cfg(target_os = "macos")]
+    {
+        crate::vcp::list_devices()
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         Err(FtdiError::Unsupported)
     }
@@ -352,9 +394,9 @@ mod tests {
 
     #[test]
     fn the_system_backend_exists_on_every_platform() {
-        // On Windows it is D2XX with the COM port behind it; elsewhere it is
-        // the one that says `Unsupported`. Either way the crate builds, links
-        // and answers.
+        // On Windows it is D2XX with the COM port behind it; on macOS the COM
+        // port alone (S63); elsewhere it is the one that says `Unsupported`.
+        // Either way the crate builds, links and answers.
         //
         // Asked for a device that cannot exist, so this runs the real
         // enumeration without opening anything: a unit test must neither need
@@ -367,10 +409,37 @@ mod tests {
         };
         let mut cable = system_backend();
         let outcome = cable.open(&nothing);
-        #[cfg(not(windows))]
-        assert_eq!(outcome, Err(FtdiError::Unsupported));
-        #[cfg(windows)]
+        // **`NotFound` and not `Unsupported` is the whole point on a platform
+        // with a backend**: the bus was enumerated and this device was not on
+        // it, which is a different sentence from *this build cannot drive a
+        // cable at all* and puts a different thing in front of an operator.
+        #[cfg(any(windows, target_os = "macos"))]
         assert_eq!(outcome, Err(FtdiError::NotFound));
+        #[cfg(not(any(windows, target_os = "macos")))]
+        assert_eq!(outcome, Err(FtdiError::Unsupported));
         cable.close();
+    }
+
+    /// **A Mac enumerates the bus rather than refusing to look** — S63.
+    ///
+    /// The regression this guards is the one the session started from: before
+    /// it, every platform but Windows answered [`FtdiError::Unsupported`] to
+    /// `list_devices`, so a Mac with an adapter plugged in reported the same
+    /// nothing as a Mac with none. It asserts only that the call *succeeds* —
+    /// what is attached to the machine running the suite is not this test's
+    /// business, and `CLAUDE.md` does not let it be.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_mac_can_enumerate_the_serial_bus() {
+        let attached = super::list_devices().expect("a Mac enumerates its own serial ports");
+        // Every device that came back is one this driver would be allowed to
+        // open — the dial-in nodes are gone before a caller ever sees them.
+        for device in &attached {
+            let path = device.path.as_deref().unwrap_or_default();
+            assert!(
+                !path.contains("/tty."),
+                "a dial-in node reached a caller: {path}"
+            );
+        }
     }
 }

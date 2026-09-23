@@ -413,6 +413,380 @@ pub fn stored_switch(data_dir: &Path) -> bool {
         .is_some_and(|config| config.settings().autostart)
 }
 
+/// The macOS **LaunchAgent**, which is §10.3's opt-in tier on this platform —
+/// **S63**.
+///
+/// `~/Library/LaunchAgents` is the user's own directory, so writing here needs
+/// no administrator rights, which is the same property that makes
+/// `HKCU\…\Run` offerable on Windows. A `LaunchDaemon` under `/Library` is the
+/// *advanced* tier in the same table and is not built, for the same reason the
+/// Windows service is not: it needs rights a school cannot grant.
+///
+/// # What is written, and why it is not just the command line
+///
+/// `launchd` reads a property list, not a string, so the command this module
+/// passes about — `"<path>" --hidden` from [`command_line`]
+/// — has to become a `ProgramArguments` array and come back again. The pair is
+/// [`macos::plist`] and [`macos::program_arguments`], and they are written as a matched
+/// pair on purpose: [`Entry::read`] must return **exactly** what
+/// [`Entry::write`] was given, or [`reconcile`] would answer
+/// `Install` on every start and rewrite an entry that was already correct.
+/// That is what `a_command_line_survives_the_round_trip` holds.
+///
+/// `RunAtLoad` is the whole of the behaviour; `KeepAlive` is deliberately
+/// **absent**. The desk is a program a person quits, and a `launchd` that
+/// restarted it the moment they did would be a desk that cannot be closed.
+#[cfg(target_os = "macos")]
+pub mod macos {
+    use super::Entry;
+    use std::path::{Path, PathBuf};
+
+    /// The reverse-DNS label the agent is filed under, which is also its file
+    /// name with `.plist` on the end.
+    ///
+    /// The bundle identifier from `tauri.conf.json`, because `launchctl list`
+    /// shows this and an operator looking for the desk should find one name
+    /// rather than two.
+    pub const LABEL: &str = "de.prismdmx.desk";
+
+    /// An agent as a file in a directory.
+    ///
+    /// # Why the directory and the label are fields rather than constants
+    ///
+    /// For the reason the Windows `RunKey`'s are: so
+    /// that the only code in this module that touches the operating system has
+    /// tests. Pointed at the real `~/Library/LaunchAgents` a test would leave a
+    /// real start-up entry on the machine that ran it, which `CLAUDE.md`
+    /// forbids as plainly for a launch agent as for a device. Pointed at a
+    /// temporary directory it is the same three file operations against the
+    /// same format.
+    ///
+    /// [`super::platform_entry`] is what supplies the real directory, so
+    /// nothing but a test ever names another.
+    #[derive(Debug, Clone)]
+    pub struct LaunchAgent {
+        /// The directory the `.plist` lives in.
+        pub directory: PathBuf,
+        /// The agent's label, and the stem of its file name.
+        pub label: String,
+    }
+
+    impl LaunchAgent {
+        /// The agent in this user's own `~/Library/LaunchAgents`.
+        ///
+        /// `None` when the home directory cannot be worked out, which is a
+        /// machine with no `HOME` in the environment — the same nothing
+        /// [`super::platform_entry`] turns into *this build cannot write one*.
+        #[must_use]
+        pub fn user() -> Option<Self> {
+            let home = std::env::var_os("HOME").filter(|value| !value.is_empty())?;
+            Some(Self {
+                directory: Path::new(&home).join("Library").join("LaunchAgents"),
+                label: LABEL.to_owned(),
+            })
+        }
+
+        /// Where the file is.
+        #[must_use]
+        pub fn path(&self) -> PathBuf {
+            self.directory.join(format!("{}.plist", self.label))
+        }
+    }
+
+    impl Entry for LaunchAgent {
+        fn read(&self) -> Result<Option<String>, String> {
+            let text = match std::fs::read_to_string(self.path()) {
+                Ok(text) => text,
+                // No file is a clean account, not a fault — the same answer
+                // the Windows path gives for a key that is not there.
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                Err(error) => return Err(error.to_string()),
+            };
+            // A plist that is there but says nothing this module recognises is
+            // reported as **no entry**, so the next `apply` writes a good one
+            // over it. The alternative — an error — would be a settings panel
+            // that can do nothing but display a fault it also cannot clear.
+            Ok(command_line_of(&text))
+        }
+
+        fn write(&self, command: &str) -> Result<(), String> {
+            std::fs::create_dir_all(&self.directory).map_err(|error| error.to_string())?;
+            std::fs::write(self.path(), plist(&self.label, command))
+                .map_err(|error| error.to_string())
+        }
+
+        fn remove(&self) -> Result<(), String> {
+            match std::fs::remove_file(self.path()) {
+                Ok(()) => Ok(()),
+                // Already gone is the state that was asked for.
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(error.to_string()),
+            }
+        }
+    }
+
+    /// The command line split the way `launchd` wants its `ProgramArguments`.
+    ///
+    /// [`command_line`](super::command_line) produces one shape and only one —
+    /// `"<path>" --hidden` — so this is a split of a known string rather than a
+    /// shell parser, and it says so by refusing anything else: a command that
+    /// is not that shape yields `None`, and the caller writes nothing.
+    #[must_use]
+    pub fn program_arguments(command: &str) -> Option<Vec<String>> {
+        let rest = command.strip_prefix('"')?;
+        let (executable, flags) = rest.split_once('"')?;
+        let mut arguments = vec![executable.to_owned()];
+        arguments.extend(flags.split_whitespace().map(str::to_owned));
+        Some(arguments)
+    }
+
+    /// The inverse: the command line an argument list carries.
+    ///
+    /// The exact inverse of [`program_arguments`], because
+    /// [`reconcile`](super::reconcile) compares the two by string equality.
+    #[must_use]
+    pub fn command_of(arguments: &[String]) -> Option<String> {
+        let (executable, flags) = arguments.split_first()?;
+        let mut command = format!("\"{executable}\"");
+        for flag in flags {
+            command.push(' ');
+            command.push_str(flag);
+        }
+        Some(command)
+    }
+
+    /// The whole file, for a label and a command line.
+    ///
+    /// Written by hand rather than through a plist library, because what goes
+    /// in it is four keys this module chose and the dependency would be carried
+    /// by every platform to serialise them on one.
+    #[must_use]
+    pub fn plist(label: &str, command: &str) -> String {
+        let arguments = program_arguments(command).unwrap_or_else(|| vec![command.to_owned()]);
+        let mut body = String::new();
+        for argument in &arguments {
+            body.push_str("\t\t<string>");
+            body.push_str(&escape(argument));
+            body.push_str("</string>\n");
+        }
+        format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+             <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \
+             \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+             <plist version=\"1.0\">\n\
+             <dict>\n\
+             \t<key>Label</key>\n\
+             \t<string>{label}</string>\n\
+             \t<key>ProgramArguments</key>\n\
+             \t<array>\n{body}\t</array>\n\
+             \t<key>RunAtLoad</key>\n\
+             \t<true/>\n\
+             </dict>\n\
+             </plist>\n",
+            label = escape(label),
+        )
+    }
+
+    /// The command line a plist carries, if it carries one this module wrote.
+    #[must_use]
+    pub fn command_line_of(text: &str) -> Option<String> {
+        let array = text.split_once("<array>")?.1.split_once("</array>")?.0;
+        let arguments: Vec<String> = array
+            .match_indices("<string>")
+            .filter_map(|(at, tag)| {
+                let from = at.checked_add(tag.len())?;
+                let value = array.get(from..)?.split_once("</string>")?.0;
+                Some(unescape(value))
+            })
+            .collect();
+        if arguments.is_empty() {
+            return None;
+        }
+        command_of(&arguments)
+    }
+
+    /// The five characters XML reserves. A path may contain an ampersand and a
+    /// plist that carried one raw would not parse.
+    fn escape(value: &str) -> String {
+        value
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+            .replace('\'', "&apos;")
+    }
+
+    /// The inverse of [`escape`]. **`&amp;` last**, so `&amp;lt;` comes back as
+    /// the text `&lt;` rather than as a `<`.
+    fn unescape(value: &str) -> String {
+        value
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&apos;", "'")
+            .replace("&amp;", "&")
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{LABEL, LaunchAgent, command_line_of, plist, program_arguments};
+        use crate::autostart::{Entry, apply, command_line};
+        use std::path::Path;
+
+        /// **What `read` gives back is what `write` was handed.**
+        ///
+        /// The property everything above the seam rests on: `reconcile`
+        /// compares the stored command with this installation's by string
+        /// equality, so a round trip that lost a character would make every
+        /// start rewrite an entry that was already right.
+        #[test]
+        fn a_command_line_survives_the_round_trip() {
+            for executable in [
+                "/Applications/PrismDMX.app/Contents/MacOS/PrismDMX",
+                // The characters a real path can hold and XML cannot.
+                "/Users/some one/Ton & Licht/PrismDMX.app/Contents/MacOS/PrismDMX",
+                "/Users/a/<odd>/PrismDMX",
+            ] {
+                let mine = command_line(Path::new(executable));
+                let written = plist(LABEL, &mine);
+                assert_eq!(
+                    command_line_of(&written).as_deref(),
+                    Some(mine.as_str()),
+                    "round trip for {executable}"
+                );
+            }
+        }
+
+        /// The file is a plist `launchd` would accept, and it says the two
+        /// things that make it an autostart.
+        #[test]
+        fn the_file_is_a_launch_agent_that_runs_at_load() {
+            let mine = command_line(Path::new(
+                "/Applications/PrismDMX.app/Contents/MacOS/PrismDMX",
+            ));
+            let written = plist(LABEL, &mine);
+            assert!(written.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
+            assert!(written.contains("<key>Label</key>"));
+            assert!(written.contains("<string>de.prismdmx.desk</string>"));
+            assert!(written.contains("<key>RunAtLoad</key>\n\t<true/>"));
+            // The flag that makes a start at log-in a tray icon rather than a
+            // window thrown over whatever is on screen.
+            assert!(written.contains("<string>--hidden</string>"));
+            // **No `KeepAlive`.** A desk that came back the moment it was quit
+            // would be a desk that cannot be closed.
+            assert!(!written.contains("KeepAlive"));
+        }
+
+        /// The argument split is the one `launchd` needs and nothing cleverer.
+        #[test]
+        fn the_command_line_becomes_an_argument_list() {
+            assert_eq!(
+                program_arguments(
+                    "\"/Applications/PrismDMX.app/Contents/MacOS/PrismDMX\" --hidden"
+                ),
+                Some(vec![
+                    "/Applications/PrismDMX.app/Contents/MacOS/PrismDMX".to_owned(),
+                    "--hidden".to_owned(),
+                ])
+            );
+            // Anything that is not this module's own shape is refused rather
+            // than guessed at.
+            assert_eq!(program_arguments("/no/quotes --hidden"), None);
+        }
+
+        /// A file that is not one of ours reads as **no entry**, so the next
+        /// `apply` writes a good one over it rather than reporting a fault a
+        /// panel cannot clear.
+        #[test]
+        fn a_plist_this_module_did_not_write_is_no_entry() {
+            assert_eq!(command_line_of("not a plist at all"), None);
+            assert_eq!(
+                command_line_of("<plist><dict><key>Label</key><string>x</string></dict></plist>"),
+                None,
+                "a plist with no ProgramArguments carries no command"
+            );
+            assert_eq!(
+                command_line_of("<array>\n</array>"),
+                None,
+                "an empty argument list is no command either"
+            );
+        }
+
+        /// **The real filesystem, through the real API, in a directory nothing
+        /// else reads.**
+        ///
+        /// What the unit tests above cannot say: that a file written comes
+        /// back, that removing one that is not there succeeds, and that a
+        /// directory which does not exist reads as *no entry* rather than as an
+        /// error. The same three claims the Windows test makes of a scratch
+        /// registry key.
+        #[test]
+        fn an_agent_is_written_read_back_and_taken_out_again() {
+            let scratch = tempfile::tempdir().expect("a temporary directory");
+            let entry = LaunchAgent {
+                // Deliberately a subdirectory that does not exist yet: the real
+                // `~/Library/LaunchAgents` is missing on a Mac that has never
+                // had one, and `write` has to make it.
+                directory: scratch.path().join("LaunchAgents"),
+                label: "de.prismdmx.desk.test".to_owned(),
+            };
+
+            assert_eq!(
+                entry.read(),
+                Ok(None),
+                "a directory that is not there is a clean account"
+            );
+            entry.remove().expect("removing what is not there succeeds");
+
+            let mine = command_line(Path::new(
+                "/Applications/PrismDMX.app/Contents/MacOS/PrismDMX",
+            ));
+            entry.write(&mine).expect("it writes");
+            assert!(entry.path().is_file(), "the plist is on disk");
+            assert_eq!(entry.read(), Ok(Some(mine.clone())));
+
+            // The decision above the seam, over the real file: the switch is on
+            // and the entry already says so, so nothing is rewritten.
+            let report = apply(&entry, true, &mine).expect("it reconciles");
+            assert!(report.supported && report.installed && report.matches_this_install);
+
+            // An entry from another installation is replaced rather than left.
+            let other = command_line(Path::new(
+                "/Volumes/Old/PrismDMX.app/Contents/MacOS/PrismDMX",
+            ));
+            entry.write(&other).expect("it writes");
+            let report = apply(&entry, true, &mine).expect("it reconciles");
+            assert!(report.matches_this_install, "the stale entry was replaced");
+            assert_eq!(entry.read(), Ok(Some(mine.clone())));
+
+            // And the switch turned off takes the file away.
+            let report = apply(&entry, false, &mine).expect("it reconciles");
+            assert!(!report.installed);
+            assert!(!entry.path().exists(), "the plist is gone");
+            entry.remove().expect("removing twice is not an error");
+        }
+
+        /// The real agent points at the user's own directory and nowhere that
+        /// needs administrator rights — §10.3's whole reason for this tier.
+        #[test]
+        fn the_users_own_agent_is_under_their_home() {
+            let Some(agent) = LaunchAgent::user() else {
+                // A machine with no HOME. Nothing to assert and nothing wrong.
+                return;
+            };
+            assert!(
+                agent
+                    .path()
+                    .ends_with("Library/LaunchAgents/de.prismdmx.desk.plist")
+            );
+            assert!(
+                !agent.path().starts_with("/Library"),
+                "a LaunchDaemon is the advanced tier and needs rights this one must not"
+            );
+        }
+    }
+}
+
 /// This platform's entry, or `None` where §10.3's opt-in tier is not built.
 #[cfg(windows)]
 #[must_use]
@@ -421,7 +795,17 @@ pub fn platform_entry() -> Option<Box<dyn Entry>> {
 }
 
 /// This platform's entry, or `None` where §10.3's opt-in tier is not built.
-#[cfg(not(windows))]
+///
+/// **S63**: a Mac has one. `None` here means only that `HOME` said nothing,
+/// which is a machine the shell could not find its own files on either.
+#[cfg(target_os = "macos")]
+#[must_use]
+pub fn platform_entry() -> Option<Box<dyn Entry>> {
+    macos::LaunchAgent::user().map(|agent| Box::new(agent) as Box<dyn Entry>)
+}
+
+/// This platform's entry, or `None` where §10.3's opt-in tier is not built.
+#[cfg(not(any(windows, target_os = "macos")))]
 #[must_use]
 pub fn platform_entry() -> Option<Box<dyn Entry>> {
     None

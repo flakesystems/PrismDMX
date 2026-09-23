@@ -33,7 +33,8 @@ pub enum AccessPath {
     D2xx,
     /// The virtual COM port (`serialport`, with `set_break`/`clear_break`).
     /// The Windows fallback for a machine where the D2XX driver is not
-    /// installed.
+    /// installed, and since **S63** the **only** path on macOS — where Apple
+    /// ships the driver that publishes it and D2XX would have to displace one.
     Vcp,
     /// `libftdi` over `rusb`. The Linux and Raspberry Pi path — `ftdi_sio`
     /// claims the device, so the kernel driver has to be detached, and D2XX is
@@ -49,7 +50,11 @@ impl AccessPath {
         {
             Self::D2xx
         }
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
+        {
+            Self::Vcp
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
         {
             Self::LibFtdi
         }
@@ -60,7 +65,10 @@ impl AccessPath {
     ///
     /// Windows has a real fallback because D2XX depends on which FTDI driver
     /// the machine happens to have installed. Linux has none: the libftdi path
-    /// is the only one §7.1 permits there.
+    /// is the only one §7.1 permits there. **macOS has none either** (S63), and
+    /// for the opposite reason to Linux's — not that the second path is
+    /// unbuilt, but that the first one is always present, so there is nothing
+    /// for a fallback to be a fallback *from*.
     #[must_use]
     pub const fn fallback() -> Option<Self> {
         #[cfg(windows)]
@@ -473,18 +481,32 @@ mod tests {
     #[test]
     fn the_access_path_follows_the_platform() {
         // ARCHITECTURE_SPEC.md §7.1: D2XX on Windows with the VCP as a
-        // fallback, libftdi on Linux and never D2XX there. This is the only
-        // place in the crate that asks what platform it is on.
+        // fallback, libftdi on Linux, the VCP alone on macOS (S63), and
+        // **never D2XX anywhere but Windows** — which is the half of this that
+        // is a claim rather than a restatement. This is the only place in the
+        // crate that asks what platform it is on.
         #[cfg(windows)]
         {
             assert_eq!(AccessPath::preferred(), AccessPath::D2xx);
             assert_eq!(AccessPath::fallback(), Some(AccessPath::Vcp));
         }
+        #[cfg(target_os = "macos")]
+        {
+            assert_eq!(AccessPath::preferred(), AccessPath::Vcp);
+            assert_eq!(AccessPath::fallback(), None);
+        }
         #[cfg(not(windows))]
         {
-            assert_eq!(AccessPath::preferred(), AccessPath::LibFtdi);
             assert_eq!(AccessPath::fallback(), None);
-            assert_ne!(AccessPath::preferred(), AccessPath::D2xx);
+            assert_ne!(
+                AccessPath::preferred(),
+                AccessPath::D2xx,
+                "D2XX is a Windows path and nothing else claims it"
+            );
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
+        {
+            assert_eq!(AccessPath::preferred(), AccessPath::LibFtdi);
         }
     }
 
