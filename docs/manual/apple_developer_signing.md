@@ -604,8 +604,14 @@ The value is now on your clipboard. Paste it straight into the secret.
    variables.
 4. **`Verify the signature`** checks the bundle, checks the **hardened runtime
    flag**, and checks the nested `prismd` — see §10 for why each.
-5. **`Notarise and staple the disk image`** submits the `.dmg`, waits, staples
-   and validates.
+5. **`Notarise and staple the disk image`** submits the `.dmg`, **polls**,
+   staples and validates. It submits *without* `--wait` and asks
+   `notarytool info` every thirty seconds instead, which is what lets it tell
+   a queue from a verdict: `Invalid` prints Apple's log and stops there, while
+   `In Progress` is waited out to `NOTARY_BUDGET_SECONDS` (forty-five minutes)
+   and no further. The disk image is uploaded as the `prismdmx-macos` artefact
+   **before** this step, so a wait that runs out costs the wait and not the
+   build — see §11's last row.
 6. **`Take the keychain away`** runs `if: always()`, because a private key left
    on a reused runner is exactly the thing that must not survive a failed run.
 
@@ -698,6 +704,7 @@ whether it is signed or not, and will tell you nothing.
 | `codesign --verify` passes but notarisation still rejects it | An ad-hoc signature is *valid* and *satisfies its designated requirement*; verifying does not ask **who** signed it | ask for the authority and the flags instead of only verifying (§10) |
 | Notarisation rejected, `The signature of the binary is invalid` | Something inside the bundle was modified **after** signing | nothing may touch the `.app` between the Tauri build and the `.dmg` |
 | `xcrun: error: unable to find utility "notarytool"` | Command Line Tools rather than full Xcode | §6.3's note |
+| Notarisation: `did not finish inside 2700s` | **A wait that ran out, not a rejection.** Apple accepted the upload and is still working; v0.9.3 met this at thirty minutes and it is why the budget is forty-five now. First submissions from a new account are the slowest | Nothing needs rebuilding. Download the **`prismdmx-macos`** artefact from that run, read the verdict with the submission id the step printed, and when it says `Accepted`, staple it onto that same file and attach it to the release. The four commands are in the note below this table |
 | The `.dmg` opens on your Mac but not on anyone else's | You are testing a file that was never quarantined | §10's last paragraph |
 | `"PrismDMX" is damaged and can't be opened` | Unsigned, downloaded, quarantined | this document, from §5 |
 
@@ -707,6 +714,30 @@ the summary — take the submission ID the `notarytool submit` output gave you:
 ```bash
 xcrun notarytool log <submission-id> --keychain-profile "prismdmx"
 ```
+
+**And when the wait ran out rather than the image being refused**, this is the
+whole of the recovery, on any Mac with the credentials. Nothing is rebuilt: the
+disk image in the artefact is the signed one the run already produced and
+`Verify the signature` already checked, and a notarisation ticket is stapled
+onto a finished file rather than baked into it.
+
+```bash
+# 1. the verdict, once Apple has reached it
+xcrun notarytool info <submission-id> --keychain-profile "prismdmx"
+
+# 2. the ticket, onto the .dmg out of the prismdmx-macos artefact
+xcrun stapler staple PrismDMX_<version>_aarch64.dmg
+xcrun stapler validate PrismDMX_<version>_aarch64.dmg
+
+# 3. what an operator's Mac will say about it
+spctl --assess --type open --context context:primary-signature -vv \
+  PrismDMX_<version>_aarch64.dmg
+```
+
+Then attach that file to the release by hand. **A disk image that is not
+stapled is not offered**: without the ticket every Mac that opens it has to
+reach Apple over the network, and a hall without internet is a file that does
+not open.
 
 ---
 

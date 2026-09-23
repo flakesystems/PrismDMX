@@ -15,11 +15,21 @@
 # commit can be wrong about. Keeping them apart means a deployment that cannot
 # happen yet does not turn a green commit red.
 #
-# **A tag deploys from `release.yml` instead**, and that is the one difference
-# worth knowing: the download page's checksum is computed from the installer,
-# and the only run that has an installer is the one that just built it. So a
-# release publishes the site itself, with `--installer` pointing at the `.exe`
-# it is about to attach, and this workflow deliberately does not fire on tags.
+# **A release comes in the other door.** The download page's checksum is
+# computed from the installer, and the only run that has an installer is the one
+# that just built it — so `release.yml` generates the site with `--installer`
+# pointing at the `.exe` it is about to attach, and uploads it as the
+# `prismdmx-site` artefact. This workflow deploys that artefact rather than
+# rebuilding, which is how the number on the page stays the number of the file.
+#
+# **It is reached by `workflow_run` and not by the tag**, and that is a
+# repository setting rather than a preference. The `github-pages` environment
+# accepts deployments from `master` alone; `release.yml` used to hold a
+# deployment job of its own and v0.9.3 was the first release to meet that
+# setting — the job was refused before a single step ran. A `workflow_run`
+# event's ref is the default branch whatever ref triggered the run underneath
+# it, so the deployment is made from `master` while the files come from the tag
+# run. Nothing here fires on a tag, and that is still true.
 #
 # **If this ever moves to a self-hosted server, it has to invert.** SSH into that
 # server is allowed only over VPN, so a build runner cannot `rsync` into it and
@@ -42,12 +52,22 @@ name: Pages
 on:
   push:
     branches: ["master"]
+  # A release run, when it has finished building. `workflows` names the
+  # `name:` of `release.yml`, and only a copy of this file on the default
+  # branch can be triggered this way — which is GitHub's rule, and the same
+  # rule that makes the deployment come from `master`.
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   # So a deployment can be made without waiting for a commit.
   workflow_dispatch:
 
-# Only what deploying needs, and nothing else.
+# Only what deploying needs, and nothing else. `actions: read` is what lets the
+# `workflow_run` path reach into the release run for its artefact; it is read
+# and it is scoped to this repository.
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -64,21 +84,69 @@ env:
 jobs:
   deploy:
     name: Build and deploy docs.prismdmx.de
+    # A `workflow_run` fires for **every** Release run, and most of them are not
+    # releases: a `workflow_dispatch` exists precisely to build without
+    # publishing, and it generates a site too. So only a run that was a **tag
+    # push** is followed — `event` says which trigger it had and `head_branch`
+    # carries the tag name for a tag push.
+    #
+    # A red run is still followed, deliberately. The macOS half can fail with
+    # the Windows half green, and that run has an installer, a release and a
+    # page whose checksum belongs to it. What it cannot survive is having built
+    # no site at all, and `There is a site to deploy` below is where that stops.
+    if: >-
+      github.event_name != 'workflow_run'
+      || (github.event.workflow_run.event == 'push'
+          && github.event.workflow_run.conclusion != 'cancelled'
+          && startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      # ---- Either the site the release built ----
+      # Taken whole rather than regenerated. The checksum on the download page
+      # is the hash of the `.exe` that run attached, and this runner does not
+      # have that file; rebuilding here would produce the same pages with the
+      # one number on them missing.
+      - name: Take the site the release built
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: prismdmx-site
+          path: docs-site
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # ---- or one built here ----
       # `docs-site/` and not `site/`: since S55 a crate of that name lives one
       # directory up, and a generator writing into it would put `prism-site`'s
       # sources on the deployed page. See `ci.yml`'s `web` job.
+      - uses: actions/checkout@v5
+        if: github.event_name != 'workflow_run'
+      - uses: dtolnay/rust-toolchain@stable
+        if: github.event_name != 'workflow_run'
+      - uses: Swatinem/rust-cache@v2
+        if: github.event_name != 'workflow_run'
+
       - name: Build the site
+        if: github.event_name != 'workflow_run'
         run: cargo run -p prism-web -- --out docs-site
+
+      # **A deployment of nothing would be a deployment.** Pages does not mind
+      # an empty directory and would happily serve the site away; the one thing
+      # that can produce one here is a download that found no artefact, so it
+      # is checked before anything is published rather than discovered by
+      # somebody opening the domain.
+      - name: There is a site to deploy
+        run: |
+          set -euo pipefail
+          if [ ! -s docs-site/index.html ]; then
+            echo "::error::docs-site/index.html is missing or empty; nothing is deployed"
+            exit 1
+          fi
+          echo "deploying $(find docs-site -type f | wc -l | tr -d ' ') files"
 
       - uses: actions/configure-pages@v5
 

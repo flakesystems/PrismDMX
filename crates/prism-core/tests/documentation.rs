@@ -542,6 +542,33 @@ fn the_changelog_has_an_entry_for_this_version() {
     );
 }
 
+/// The release notes have a section for the version that is about to be built.
+///
+/// The sibling of the test above, and since 2026-09-23 it is also a gate on
+/// `release.yml`. That workflow used to paste `docs/RELEASE_NOTES.md` **whole**
+/// into the release body, which is how v0.9.3's page came to carry 0.9.2's
+/// announcement and 0.9.1's underneath its own. It now takes this version's
+/// section alone — found by its `# PrismDMX <version>` heading — and **refuses
+/// the release** when there is none, because falling back to the whole file or
+/// to the newest section publishes the wrong text under the right number.
+///
+/// A tag is an expensive place to discover that: the refusal lands after the
+/// whole Windows pass. This is the same question asked by `cargo test`.
+#[test]
+fn the_release_notes_have_a_section_for_this_version() {
+    let version = env!("CARGO_PKG_VERSION");
+    let text = read(&root().join("docs/RELEASE_NOTES.md"));
+    let heading = format!("# PrismDMX {version}");
+    let found = text
+        .lines()
+        .filter_map(|line| line.strip_prefix(&heading))
+        .any(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace));
+    assert!(
+        found,
+        "docs/RELEASE_NOTES.md has no `{heading}` section, so `release.yml` would refuse the tag"
+    );
+}
+
 /// The site's command-line page names every word the desk understands.
 ///
 /// `docs/site/command-line.{en,de}.md` are written **for the website** rather
