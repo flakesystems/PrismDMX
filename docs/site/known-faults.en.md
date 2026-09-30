@@ -168,6 +168,18 @@ appear that shifts parts of the UI.
 
 **What you will see.** Type something in the command line and watch the UI jump.
 
+## B68 — mac installer does not include the Open Fixture Library
+
+**Where:** mac installer, fixture library.
+**Severity:** annoying.
+
+**What happens.** The downloaded Mac version does not include the Open Fixture
+Library — only the generic fixtures are available. There is also no way to
+download the library from the settings.
+
+**What you will see.** Download and install the Mac version, open the Patch
+window — only generic fixtures are available.
+
 ## B62 — store bar in the cue viewer
 
 **Fixed for the next release.** The store bar is gone; the Update key blinks in the *CommandKeys* window.

@@ -720,6 +720,16 @@ angezeigt wird.*
 - **Ergebnis:** ☐ offen — groß genug für eine eigene Session; die Frage nach
   den OFL-Fixtures entscheidet der Eigentümer vorher
 
+
+### B68 — Der Mac-Installer enthält keine OFL-Bibliothek (GitHub #41)
+
+- **Wo:** Mac-Installer, Fixture-Bibliothek
+- **Schwere:** ärgerlich
+- **Was passiert:** Die heruntergeladene Mac-Version enthält keine Open-Fixture-Library-Profile. Es stehen nur generische Fixtures zur Verfügung. Es gibt auch keine Möglichkeit, die Bibliothek über die Einstellungen nachzuladen.
+- **Was passieren soll:** Der Mac-Installer soll die OFL-Bibliothek mitliefern — so wie der Windows-Installer — oder eine integrierte Download-Option in den Einstellungen bereitstellen
+- **So sieht man es:** Mac-Version herunterladen und installieren, Patch-Fenster öffnen — nur generische Fixtures verfügbar
+- **Ergebnis:** ☐ offen
+
 ## Einstellungen und Pult
 
 *Das Einstellungs-Fenster, die fünf Panels, der Control-Editor, das X-Touch.*

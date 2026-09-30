@@ -175,6 +175,19 @@ Befehlsfeedback, das Teile des UI verschiebt.
 **So sehen Sie es.** Etwas in die Kommandozeile tippen und beobachten, wie das
 UI springt.
 
+## B68 — Der Mac-Installer enthält keine OFL-Bibliothek
+
+**Wo:** Mac-Installer, Fixture-Bibliothek.
+**Schwere:** ärgerlich.
+
+**Was passiert.** Die heruntergeladene Mac-Version enthält keine
+Open-Fixture-Library-Profile — es stehen nur generische Fixtures zur Verfügung.
+Es gibt auch keine Möglichkeit, die Bibliothek über die Einstellungen
+nachzuladen.
+
+**So sehen Sie es.** Mac-Version herunterladen und installieren,
+Patch-Fenster öffnen — nur generische Fixtures verfügbar.
+
 ## B62 — Store-Leiste im Cue Viewer
 
 **Behoben für die nächste Version.** Die Store-Leiste ist weg; die Update-Taste blinkt im Fenster *CommandKeys*.
