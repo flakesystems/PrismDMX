@@ -137,6 +137,14 @@ export interface ExecutorStrip {
   readonly faderFunction: ExecutorFaderFunction | null;
   /** What its encoder does, or `null` for an unassigned slot. */
   readonly encoderFunction: ExecutorEncoderFunction | null;
+  /**
+   * Whose list its encoder turns when that is **not its own** — S60 — or `null`
+   * for an encoder on its own executor, and for an unassigned slot.
+   *
+   * A show written before S60 has no such key at all and reads `null`, which is
+   * exactly what the daemon means by it: every encoder was on its own.
+   */
+  readonly encoderExecutor: number | null;
   /** What its four buttons do, in hardware order: Rec, Solo, Mute, Select. */
   readonly buttonFunctions: readonly ExecutorButtonFunction[];
 }
@@ -226,6 +234,45 @@ export function pageStrips(
   return strips;
 }
 
+/** An executor an encoder can be put on — S60. */
+export interface EncoderTarget {
+  /** Its number. */
+  readonly executorId: number;
+  /** The name of the cue list on it, or `null` when there is none. */
+  readonly name: string | null;
+}
+
+/**
+ * The executors a strip's encoder may be given, in number order — **S60**.
+ *
+ * Every executor the show holds **except the strip's own** (*its own* is a
+ * choice of its own, not a number), across all pages: the point of the setting
+ * is to turn a list whose strip is not under the hand, and that strip may well
+ * be on another page. One with no cue list on it is still offered, with no name,
+ * because the daemon accepts it and the encoder then answers a refusal when it
+ * is turned — and a chooser that hid an executor the show *does* point at would
+ * show the operator a setting that is not the one in force.
+ */
+export function encoderTargets(show: JsonValue | null, own: number): readonly EncoderTarget[] {
+  const executors = valueAt(show, "/executors");
+  if (executors === null || !isObject(executors)) {
+    return [];
+  }
+  const targets: EncoderTarget[] = [];
+  for (const key of Object.keys(executors)) {
+    const executorId = Number(key);
+    if (!Number.isInteger(executorId) || executorId === own) {
+      continue;
+    }
+    const sequenceId = numberAt(executors[key] ?? null, "/sequenceId");
+    targets.push({
+      executorId,
+      name: sequenceId === null ? null : stringAt(show, `/sequences/${String(sequenceId)}/name`),
+    });
+  }
+  return targets.sort((a, b) => a.executorId - b.executorId);
+}
+
 /** One strip, read out of the show document. */
 function stripOf(show: JsonValue | null, page: number, slot: number): ExecutorStrip {
   const executorId = executorIdAt(page, slot);
@@ -246,6 +293,7 @@ function stripOf(show: JsonValue | null, page: number, slot: number): ExecutorSt
       currentCueIndex: null,
       faderFunction: null,
       encoderFunction: null,
+      encoderExecutor: null,
       buttonFunctions: [],
     };
   }
@@ -270,6 +318,7 @@ function stripOf(show: JsonValue | null, page: number, slot: number): ExecutorSt
       sequence === null ? null : numberAt(show, `${sequence}/currentCueIndex`),
     faderFunction,
     encoderFunction: encoderFunctionOf(stringAt(executor, "/encoderFunction")),
+    encoderExecutor: numberAt(executor, "/encoderExecutor"),
     buttonFunctions: buttonFunctionsOf(valueAt(executor, "/buttonFunctions")),
   };
 }

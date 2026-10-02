@@ -147,4 +147,57 @@ describe("the control editor", () => {
     editor(SHOW, { session: { executorPage: 3, selectedExecutor: 1 } });
     expect(screen.getByTestId("editor-none").textContent).toContain("not on this page");
   });
+
+  /**
+   * **S60** — *whose* list the encoder turns, as an operator sets it up.
+   *
+   * Executor 1's encoder is on executor 11, which is on another page, and 11 has
+   * a list; 12 has none. Neither of those is on page 0 and both are offered:
+   * the point of the setting is a strip that is not under the hand.
+   */
+  const FAR: JsonValue = {
+    sequences: {
+      "7": { name: "Act one", masterLevel: 65535, speed: 1024 },
+      "9": { name: "Haze", masterLevel: 65535, speed: 1024 },
+    },
+    executors: {
+      "1": {
+        id: 1,
+        sequenceId: 7,
+        faderFunction: "XFade",
+        encoderFunction: "Master",
+        encoderExecutor: 11,
+        buttonFunctions: [],
+      },
+      "11": { id: 11, sequenceId: 9, faderFunction: "Master", encoderFunction: "Empty", encoderExecutor: null, buttonFunctions: [] },
+      "12": { id: 12, sequenceId: null, faderFunction: "Master", encoderFunction: "Empty", encoderExecutor: null, buttonFunctions: [] },
+    },
+  };
+
+  it("offers every other executor of the show, whatever page it is on, and marks the one in force", () => {
+    editor(FAR);
+    const row = screen.getByTestId("editor-encoder-on") as HTMLSelectElement;
+    expect(row.value).toBe("11");
+    expect([...row.options].map((option) => option.textContent)).toEqual([
+      "Its own executor",
+      "Executor 11 — Haze",
+      "Executor 12",
+    ]);
+  });
+
+  it("reads a show with no such key as an encoder on its own executor", () => {
+    // The show every file written before S60 is: there is no `encoderExecutor`.
+    editor();
+    expect((screen.getByTestId("editor-encoder-on") as HTMLSelectElement).value).toBe("own");
+  });
+
+  it("writes the line that gives an encoder another executor, or takes it back", () => {
+    const lines = editor(FAR);
+    fireEvent.change(screen.getByTestId("editor-encoder-on"), { target: { value: "12" } });
+    fireEvent.change(screen.getByTestId("editor-encoder-on"), { target: { value: "own" } });
+    expect(lines).toEqual([
+      "Assign Executor 1 Encoder Executor 12",
+      "Assign Executor 1 Encoder Own",
+    ]);
+  });
 });

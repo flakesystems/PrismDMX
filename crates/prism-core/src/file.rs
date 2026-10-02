@@ -1493,6 +1493,7 @@ impl ShowFile {
             | Command::Goto { .. }
             | Command::ExecutorButton { .. }
             | Command::SetExecutorMaster { .. }
+            | Command::ExecutorEncoder { .. }
             | Command::SelectSequence { .. }
             | Command::Oops
             | Command::Redo

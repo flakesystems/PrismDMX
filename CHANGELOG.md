@@ -20,6 +20,31 @@ Alle Versionen bisher sind **Vorabversionen**.
 
 ---
 
+## Noch nicht veröffentlicht
+
+- **Encoder:** die Encoder der Executor-Streifen am X-Touch **tun jetzt etwas**.
+  Bisher ließ sich ihre Funktion einstellen, aber nichts las sie — auch dort
+  nicht, wo der Eigentümer sie am 2026-09-20 im Crossfade-Betrieb vermisst hat;
+  sie taten in **keinem** Fader-Modus etwas (B69). Ein Encoder auf *Master*
+  bewegt den Master seiner Liste, auf *Speed* ihre Geschwindigkeit — gleich, was
+  der Fader desselben Executors tut.
+- **Encoder auf einer anderen Liste:** ein Encoder darf die Liste eines anderen
+  Executors drehen (`Assign Executor 1 Encoder Executor 3`, und `… Encoder Own`
+  zurück). Im Fenster *Executors* steht die Wahl unter *Encoder on*; das letzte
+  Zeichen der unteren Zeile am Streifen zeigt den Encoder (`m`, `s`, `@` für
+  eine fremde Liste, `-`).
+- **Achtung beim Update:** die Standardbelegung des X-Touch hat sich geändert
+  (der Strip-Encoder ist belegt), deshalb übernimmt ein Pult, das schon
+  eingerichtet war, **die neue Standardtabelle** — wer eine eigene Belegung
+  hatte, exportiert sie vor dem Update unter *Settings → Controls* und
+  importiert sie danach wieder.
+- **Fixture-Bibliothek:** ein frisch installiertes Pult fand die mitgelieferte
+  Open Fixture Library nicht und bot im Patch-Fenster nur generische Fixtures an
+  — der Mac-Installer hatte sie dabei, erkannt wurde sie nicht. Behoben (B68,
+  GitHub #41).
+
+---
+
 ## 0.9.3 — der Visualizer, eine echte Bibliothek und der Mac
 
 Die größte der Vorabversionen bisher. Der Eigentümer hielt sie zweimal zurück:

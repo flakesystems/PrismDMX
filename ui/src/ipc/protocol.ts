@@ -993,6 +993,7 @@ function readSurfaceAction(value: unknown, path: string): SurfaceAction {
     asVariant(field(record, "target"), `${path}.target`, EXECUTOR_TARGET_VARIANTS);
   switch (tag) {
     case "ExecutorMaster":
+    case "ExecutorEncoder":
     case "ExecutorOff":
     case "ExecutorOn":
     case "SelectExecutor":

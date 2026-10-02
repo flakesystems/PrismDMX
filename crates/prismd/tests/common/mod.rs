@@ -135,6 +135,7 @@ pub fn show_file() -> ShowFile {
         fader_function: ExecutorFaderFunction::Master,
         button_functions: Vec::new(),
         encoder_function: ExecutorEncoderFunction::Empty,
+        encoder_executor: None,
     })
     .unwrap();
 

@@ -650,6 +650,30 @@ Damit ist alles, was Sie tippen können, auch eine Taste — und dieselbe Zeile
 lässt sich auf eine X-Touch-Taste legen, sodass Fenster, Zeile und Hardware ein
 Weg sind und nicht drei.
 
+**Ein Encoder hat eine eigene Funktion und eine eigene Liste.** Die Funktion
+(`Master`, `Speed`) ist das, was er tut; die Liste ist der Executor, an dem er
+es tut. Ohne weitere Angabe dreht er die Liste seines eigenen Executors, wie er
+es immer getan hat. Zwei weitere Zeilen schicken ihn woandershin und wieder
+zurück:
+
+```
+Assign Executor 1 Encoder Executor 3   stattdessen die Liste von Executor 3 drehen
+Assign Executor 1 Encoder Own          und wieder die eigene
+```
+
+Der Sinn davon: mit dem Fader den Crossfade einer Liste fahren, während der
+Encoder daneben die Geschwindigkeit einer anderen fährt. Das Fenster *Executors*
+bietet dieselbe Wahl unter **Encoder on** an, über alle Seiten hinweg. **Der
+Encoder fragt nie, was der Fader tut:** `Master` bewegt den Master der Liste, ob
+der Fader nun ein Master, ein Crossfade oder nichts ist. Ein Rastpunkt am
+X-Touch-Encoder bewegt einen Master um etwa 0,4 Prozent und eine
+Geschwindigkeit um etwa 3 Prozent der normalen; schnelles Drehen geht weiter,
+und am Ende des Bereichs bleibt er stehen, statt umzuspringen.
+
+Das letzte Zeichen der unteren Zeile eines Streifens ist der Encoder: `m` für
+Master, `s` für Speed, `-` für nichts und `@`, wenn er auf der Liste **eines
+anderen Executors** liegt.
+
 > Eine Zeile mit Satzzeichen darin **gehört in Anführungszeichen**. `go+`, `+`
 > und `,` werden vom Zerleger umgeschrieben, damit `1 + 2` das heißt, was da
 > steht. Also: `Command "Go+ Sequence 3"`, nicht `Command Go+ Sequence 3`.

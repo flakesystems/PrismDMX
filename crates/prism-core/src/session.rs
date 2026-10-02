@@ -411,6 +411,7 @@ impl SessionState {
             | Command::ExecutorOff { .. }
             | Command::ExecutorButton { .. }
             | Command::SetExecutorMaster { .. }
+            | Command::ExecutorEncoder { .. }
             | Command::PatchFixture { .. }
             | Command::PatchFixtures { .. }
             | Command::UnpatchFixture { .. }

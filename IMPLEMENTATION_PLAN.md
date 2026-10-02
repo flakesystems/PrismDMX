@@ -1617,9 +1617,19 @@ anybody who wants their old one back.
 ---
 
 ## S60 · `prism-core` + `prismd` + `ui` — an encoder may hold an executor of its own
-**Size:** M · **Depends on:** S45, S59 · **Asked for on 2026-09-20**, and placed
-**after S30, outside the coming release**, by the owner's decision of the same
-day.
+**Size:** M · **Depends on:** S45, S59 · **Done 2026-10-02**
+(`PROGRESS.md` §2.63) · **Asked for on 2026-09-20**, and placed **after S30,
+outside the coming release**, by the owner's decision of the same day.
+
+**What it came to, and what the three questions were answered with.** The fault
+below was reproduced first and was **not** the crossfade: nothing read an
+executor's `encoder_function`, in any fader mode, and the strip encoder was bound
+to nothing. Built: `Command::ExecutorEncoder` resolved by the encoder's *own*
+function; `Executor::encoder_executor: Option<ExecutorId>` (a **number on the
+executor**, `None` = its own, so every stored show opens unchanged);
+`SurfaceAction::ExecutorEncoder`, bound by default (`SURFACE_BINDINGS_GENERATION`
+2); the strip's seventh character (`m`, `s`, `@`, `-`); and *Encoder on* in the
+`Executors` window. Asserted on the byte a mock output received.
 
 **Goal:** a strip's encoder stops being tied to the executor its fader stands on.
 `Executor::encoder_function` already says *what* the encoder does (`Empty`,
@@ -1913,5 +1923,5 @@ is, is the order the work was planned to make sense in.
 | 25c | **S30** 3D viewer | **Done 2026-09-21** — see `PROGRESS.md` §2.59. The last thing the release waited for: fixtures are placed from the viewer (`PlaceFixtures`, one Oops, no repatch), the beams come off the cable, and the DMX Sheet keeps its budget with the viewer open on 64 universes. The first of Phase 9's five to run. **0.9.3 can be tagged** once the owner's rig test (`docs/RELEASE_TEST_0.9.3.md`, now with chapter 2a) comes back clean |
 | 25c1 | **S62** core/`prismd`/`ui` — wie eine Bibliothek auf ein Pult kommt | ✅ **Fertig 2026-09-21** — siehe `PROGRESS.md` §2.58. Fällt aus S61: das Pult liest GDTF, aber GDTF Share verlangt ein Konto und verbietet die Weitergabe (`docs/FIXTURE_LIBRARY.md` §2, mit Quellen). MVR-Import **mit Patch**, `.gdtf`-Import über den Dateidialog und der optionale In-App-Login; OFL bleibt die Grundausstattung. **MVR ist der wichtigste Teil** — die Rig-Datei vom Planer löst den realen Fall ohne Konto, ohne Netz und ohne Lizenzfrage. Offen: der echte Dienst ist ungetestet, und das Merken der Zugangsdaten geht nur auf Windows |
 | 25c2 | **S63** protocols/`prismd`/`prism-app`/`prism-engine` — Mac support, the cross-platform abstraction and Apple code signing | ✅ **Done 2026-09-22** — see `PROGRESS.md` §2.62. Asked for on a physical MacBook and run entirely there. Not a feature: it is the second release target, and what made it cheap is §10.1 — `cargo build --workspace` **already succeeded** on macOS before a line changed, so the work was a cable, an autostart and a keychain rather than a port. Every change is a macOS arm **beside** the Windows one; nothing Windows-only was removed. The `macos` job is in `release.yml` and **must never be copied into `ci.yml`**: a macOS runner minute costs ten times a Linux one, which makes §7 stronger here rather than weaker. **Numbered S63 and not S60**, which the brief proposed: S60 is row 25d below and a number is an identity. It found four bugs, and three had nothing to do with macOS — two latent ones in `prism-engine` (a tick waking late, a tick allocating) and an installer check naming a file S61 had moved, which **would have failed the next tag**. Open: nothing has been signed, because there is no Developer ID certificate, and no cable has been driven on a Mac |
-| 25d | **S60** core/`prismd`/`ui` — an encoder may hold an executor of its own | After **S30**, and deliberately **outside the coming release** — the owner's decision of 2026-09-20. It carries the encoder-in-crossfade fault of the same day, which is not in `docs/ISSUES.md` because it has not been finally verified |
+| 25d | **S60** core/`prismd`/`ui` — an encoder may hold an executor of its own | **Done 2026-10-02** — see `PROGRESS.md` §2.63. The encoder-in-crossfade fault was reproduced and was not the crossfade: nothing read `encoder_function`, in any fader mode. Fixed with the feature, and recorded as **B69**. Asked for after S30 and kept outside 0.9.3, as the owner decided on 2026-09-20 |
 | 26 | **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | The rest of the extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author. **S30 moved ahead of them** (row 25c) |

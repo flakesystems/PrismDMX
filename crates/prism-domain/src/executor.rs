@@ -310,6 +310,21 @@ pub enum ExecutorChange {
         /// The function.
         function: ExecutorEncoderFunction,
     },
+    /// **Whose** playback the encoder drives — S60.
+    ///
+    /// [`Self::Encoder`] says what the encoder does; this says to which list.
+    /// `None` is *its own executor's*, which is what every encoder was before
+    /// this existed and what a show written then still means. An executor naming
+    /// **itself** is stored as `None` as well, so there is one spelling of
+    /// *mine* and a comparison of two encoders is a comparison of two values.
+    ///
+    /// An executor number and not a cue list, because the thing an operator
+    /// points at is a *strip* — *the encoder on strip 3 turns what strip 7
+    /// plays* — and strip 7 may be given another list tomorrow.
+    EncoderExecutor {
+        /// The executor, or `None` for the one this encoder belongs to.
+        executor_id: Option<ExecutorId>,
+    },
     /// What one of the four buttons does.
     ///
     /// The index is a *hardware position* — Rec, Solo, Mute, Select = 0..4,
@@ -355,6 +370,22 @@ pub struct Executor {
     pub button_functions: Vec<ExecutorButtonFunction>,
     /// Encoder assignment.
     pub encoder_function: ExecutorEncoderFunction,
+    /// The executor whose playback the encoder drives, when it is not this
+    /// one's — **S60**.
+    ///
+    /// `None` is the encoder's own executor, which is every encoder in a show
+    /// written before S60: the field is `#[serde(default)]`, so such a file
+    /// opens unchanged and every encoder is on its own executor as it was. It
+    /// is a *number* and not a page offset, which is the question the plan left
+    /// open: an offset would move a bank of eight together and would need a
+    /// place to live that is the page's rather than any executor's, whereas this
+    /// one is the same thing as [`Self::sequence_id`] — a reference an executor
+    /// holds — and a bank can be built out of it eight times over.
+    ///
+    /// Read by `prism_core`'s encoder command, and **only** there: the fader
+    /// never looks at it, and the encoder never looks at the fader's function.
+    #[serde(default)]
+    pub encoder_executor: Option<ExecutorId>,
 }
 
 impl ExecutorId {
@@ -450,6 +481,7 @@ mod tests {
                 ExecutorButtonFunction::GoBack,
             ],
             encoder_function: ExecutorEncoderFunction::Speed,
+            encoder_executor: None,
         }
     }
 
@@ -460,7 +492,43 @@ mod tests {
         // list's. What is left is the assignment, which is what an executor is.
         assert_eq!(
             serde_json::to_string(&executor()).unwrap(),
-            r#"{"id":9,"sequenceId":1,"faderFunction":"Master","buttonFunctions":["Go+","Go-"],"encoderFunction":"Speed"}"#
+            r#"{"id":9,"sequenceId":1,"faderFunction":"Master","buttonFunctions":["Go+","Go-"],"encoderFunction":"Speed","encoderExecutor":null}"#
+        );
+    }
+
+    /// **A show written before S60 opens unchanged** — the half of that exit
+    /// criterion that lives in the domain: an executor with no
+    /// `encoderExecutor` at all reads as one whose encoder is on its own.
+    #[test]
+    fn an_executor_written_before_s60_has_its_encoder_on_its_own() {
+        let old: Executor = serde_json::from_str(
+            r#"{"id":9,"sequenceId":1,"faderFunction":"Master","buttonFunctions":["Go+"],"encoderFunction":"Speed"}"#,
+        )
+        .unwrap();
+        assert_eq!(old.encoder_executor, None);
+        assert_eq!(old.encoder_function, ExecutorEncoderFunction::Speed);
+        let again: Executor =
+            serde_json::from_str(&serde_json::to_string(&executor()).unwrap()).unwrap();
+        assert_eq!(again, executor());
+    }
+
+    #[test]
+    fn an_encoder_names_another_executor_on_the_wire() {
+        let mut elsewhere = executor();
+        elsewhere.encoder_executor = Some(ExecutorId::new(3));
+        let text = serde_json::to_string(&elsewhere).unwrap();
+        assert!(text.ends_with(r#""encoderExecutor":3}"#), "{text}");
+        let change = ExecutorChange::EncoderExecutor {
+            executor_id: Some(ExecutorId::new(3)),
+        };
+        assert_eq!(
+            serde_json::to_string(&change).unwrap(),
+            r#"{"t":"EncoderExecutor","executorId":3}"#
+        );
+        let own = ExecutorChange::EncoderExecutor { executor_id: None };
+        assert_eq!(
+            serde_json::to_string(&own).unwrap(),
+            r#"{"t":"EncoderExecutor","executorId":null}"#
         );
     }
 

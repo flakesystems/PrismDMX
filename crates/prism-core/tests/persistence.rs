@@ -234,6 +234,7 @@ fn saveable_file() -> ShowFile {
                 ExecutorButtonFunction::Toggle,
             ],
             encoder_function: ExecutorEncoderFunction::Speed,
+            encoder_executor: None,
         })
         .unwrap();
     // The level and the rate are the **cue list's** since S45, and neither is

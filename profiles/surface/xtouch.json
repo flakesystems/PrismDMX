@@ -81,7 +81,7 @@
     { "control": "Strip[*].Button.Mute", "action": { "t": "ExecutorButton", "target": "Strip", "button": { "t": "Slot", "index": 2 } } },
     { "control": "Strip[*].Button.Select", "action": { "t": "ExecutorButton", "target": "Strip", "button": { "t": "Slot", "index": 3 } } },
     { "control": "Strip[*].Button.VPotPush", "action": { "t": "SelectExecutor", "target": "Strip" } },
-    { "control": "Strip[*].Encoder", "action": null },
+    { "control": "Strip[*].Encoder", "action": { "t": "ExecutorEncoder", "target": "Strip" } },
 
     { "control": "Main.Fader", "action": { "t": "ExecutorMaster", "target": "Selected" } },
     { "control": "Global.Flip", "action": { "t": "ExecutorButton", "target": "Selected", "button": { "t": "Function", "function": "Go+" } } },

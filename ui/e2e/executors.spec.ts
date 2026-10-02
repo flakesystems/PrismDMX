@@ -227,12 +227,23 @@ test("**B15**: an executor's controls are assignable, and the strip follows", as
   await expect(page.getByTestId("button-2-3")).toHaveAttribute("data-function", "CommandLine");
   await expect(page.getByTestId("button-2-3")).toHaveAttribute("title", /Go\+ Sequence 2/);
 
+  // **S60** — an encoder with a function and a list of its own. It reads *its
+  // own executor* until it is told otherwise, and the choice offers the show's
+  // other executors.
+  await expect(page.getByTestId("editor-encoder-on")).toHaveValue("own");
+  await page.getByTestId("editor-encoder").selectOption("Master");
+  await page.getByTestId("editor-encoder-on").selectOption("0");
+  await expect(page.getByTestId("editor-encoder-on")).toHaveValue("0");
+
   // A reload asks the daemon what it holds: the assignment is show state and
   // survives, with nothing of this browser's in the answer.
   await page.reload();
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
   await expect(page.getByTestId("fader-2")).toHaveAttribute("data-function", "Master");
   await expect(page.getByTestId("button-2-3")).toHaveAttribute("data-function", "CommandLine");
+  await page.getByTestId("select-2").click();
+  await expect(page.getByTestId("editor-encoder")).toHaveValue("Master");
+  await expect(page.getByTestId("editor-encoder-on")).toHaveValue("0");
 });
 
 /**

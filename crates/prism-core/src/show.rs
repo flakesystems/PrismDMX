@@ -1736,6 +1736,32 @@ impl Show {
                     value: to_json(function)?,
                 }
             }
+            ExecutorChange::EncoderExecutor { executor_id } => {
+                // **Yourself is no one else** — S60. An executor pointing its
+                // encoder at itself is stored as `None`, so there is one
+                // spelling of *mine* and two encoders that do the same thing
+                // compare equal.
+                let wanted = executor_id.filter(|target| *target != id);
+                if executor.encoder_executor == wanted {
+                    return Ok(Vec::new());
+                }
+                // The other strip has to be there: an encoder pointed at a
+                // number nothing is on is a line an operator can act on, and
+                // silence is not (`UnknownExecutor`'s own reason, above).
+                if let Some(target) = wanted
+                    && !self.executors.contains_key(&target)
+                {
+                    return Err(ShowError::UnknownExecutor(target));
+                }
+                let Some(executor) = self.executors.get_mut(&id) else {
+                    return Err(ShowError::UnknownExecutor(id));
+                };
+                executor.encoder_executor = wanted;
+                JsonPatchOp::Replace {
+                    path: format!("{path}/encoderExecutor"),
+                    value: to_json(&wanted)?,
+                }
+            }
             ExecutorChange::Button { index, function } => {
                 if *index >= EXECUTOR_BUTTONS {
                     return Err(ShowError::NoSuchExecutorButton(*index));
@@ -1975,6 +2001,7 @@ fn default_executor(id: ExecutorId, sequence_id: Option<SequenceId>) -> Executor
             ExecutorButtonFunction::Empty,
         ],
         encoder_function: ExecutorEncoderFunction::Empty,
+        encoder_executor: None,
     }
 }
 

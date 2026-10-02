@@ -86,6 +86,11 @@ fn lit(action: &SurfaceAction, strip: Option<u8>, core: &Core) -> bool {
         SurfaceAction::SelectExecutor { target } => sequence_of(*target, strip, core)
             .and_then(|id| core.file.show.sequence(id))
             .is_some_and(|sequence| sequence.is_active),
+        // **Dark on purpose** — S60. A turn is a gesture and not a state: there
+        // is nothing about an encoder that is *on*, and a key somebody binds to
+        // one has no condition to report. Named so that it is a decision and
+        // not whatever the wildcard below happens to say about a new action.
+        SurfaceAction::ExecutorEncoder { .. } => false,
         // Everything else has no state worth a lamp: a window is neither open
         // nor closed from a key's point of view, a view is always reachable, an
         // encoder bank is always switchable, and a fader has no lamp at all.

@@ -931,6 +931,7 @@ impl Programmer {
             | Command::Goto { .. }
             | Command::ExecutorButton { .. }
             | Command::SetExecutorMaster { .. }
+            | Command::ExecutorEncoder { .. }
             | Command::PatchFixture { .. }
             | Command::PatchFixtures { .. }
             | Command::UnpatchFixture { .. }

@@ -811,21 +811,33 @@ fn fader_reading(
     }
 }
 
-/// The strip's legend: what its four keys do, then what its fader does.
+/// The strip's legend: what its four keys do, what its fader does, and what its
+/// encoder does.
 ///
 /// One character each, because a scribble strip is seven wide and the words do
-/// not fit — `docs/MCU_MAPPING.md` §4.1 has the departure and the reason. A slot
+/// not fit — `docs/MCU_MAPPING.md` §4.1 has the departure and the reason. Four
+/// keys, a space, the fader and the encoder are **seven**, which is the whole
+/// width and is why S45's legend of six had one character to give.
+///
+/// **The encoder's is lower case, and two owners are one character.** `m` and
+/// `s` are what it does to its *own* executor's list, in the case the fader's
+/// `M` and `S` are not, so the two cannot be read as each other. An encoder that
+/// has been given **another executor's** list is `@` whatever it does to it —
+/// *it is not this strip's* is the thing worth seeing from the other side of a
+/// desk, and what it does there is a question the `Executors` window answers.
+/// An encoder with nothing on it is `-` either way. A slot
 /// with no executor at all is blank rather than five dashes: an empty strip
 /// already says `Ex 5` on the line above, and a row of punctuation under it
 /// would read as something being switched off.
 fn legend(executor: Option<&prism_domain::Executor>) -> String {
     use prism_domain::ExecutorButtonFunction as Button;
+    use prism_domain::ExecutorEncoderFunction as Encoder;
     use prism_domain::ExecutorFaderFunction as Fader_;
 
     let Some(executor) = executor else {
         return String::new();
     };
-    let mut legend = String::with_capacity(usize::from(prism_domain::EXECUTOR_BUTTONS) + 2);
+    let mut legend = String::with_capacity(usize::from(prism_domain::EXECUTOR_BUTTONS) + 3);
     for index in 0..usize::from(prism_domain::EXECUTOR_BUTTONS) {
         legend.push(match executor.button_functions.get(index) {
             Some(Button::GoForward) => '>',
@@ -849,6 +861,16 @@ fn legend(executor: Option<&prism_domain::Executor>) -> String {
         Fader_::Fade => 'F',
         Fader_::Empty => '-',
     });
+    legend.push(
+        match (executor.encoder_function, executor.encoder_executor) {
+            (Encoder::Empty, _) => '-',
+            // `encoder_executor` is `None` for an executor's own, and is never the
+            // executor itself (`Show::configure_executor` stores that as `None`).
+            (_, Some(_)) => '@',
+            (Encoder::Master, None) => 'm',
+            (Encoder::Speed, None) => 's',
+        },
+    );
     legend
 }
 
@@ -1398,21 +1420,35 @@ mod tests {
                 Button::Empty,
             ],
             encoder_function: ExecutorEncoderFunction::Empty,
+            encoder_executor: None,
         };
-        assert_eq!(legend(Some(&executor)), "><x- M");
+        assert_eq!(legend(Some(&executor)), "><x- M-");
         // Seven is what a scribble strip has, and this is what has to fit in it.
         assert!(legend(Some(&executor)).len() <= prism_surface::STRIP_CHARS);
+
+        // **S60: the encoder is the seventh character**, in the case the fader's
+        // are not — and it is `@` when the list it turns is another strip's.
+        executor.encoder_function = ExecutorEncoderFunction::Master;
+        assert_eq!(legend(Some(&executor)), "><x- Mm");
+        executor.encoder_function = ExecutorEncoderFunction::Speed;
+        assert_eq!(legend(Some(&executor)), "><x- Ms");
+        executor.encoder_executor = Some(ExecutorId::new(7));
+        assert_eq!(legend(Some(&executor)), "><x- M@");
+        // With nothing on it there is nothing to say about whose it is.
+        executor.encoder_function = ExecutorEncoderFunction::Empty;
+        assert_eq!(legend(Some(&executor)), "><x- M-");
+        executor.encoder_executor = None;
 
         // A reassignment relabels it, which is the whole point.
         executor.button_functions[3] = Button::CommandLine {
             line: "Go+ Sequence 3".to_owned(),
         };
         executor.fader_function = ExecutorFaderFunction::XFade;
-        assert_eq!(legend(Some(&executor)), "><x* X");
+        assert_eq!(legend(Some(&executor)), "><x* X-");
 
         executor.button_functions = Vec::new();
         executor.fader_function = ExecutorFaderFunction::Empty;
-        assert_eq!(legend(Some(&executor)), "---- -");
+        assert_eq!(legend(Some(&executor)), "---- --");
 
         // A slot with no executor at all is blank rather than punctuation: the
         // line above it already says `Ex 5`, and a row of dashes under that

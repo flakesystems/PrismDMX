@@ -239,6 +239,14 @@ impl Resolve for SurfaceAction {
                 executor_id: executor_of(target, origin, context)?,
                 level: input.level()?,
             },
+            // **Steps, not a level** — S60. The turn is passed on as it came
+            // and *what it is worth* is the executor's own business
+            // (`Command::ExecutorEncoder`): this table knows which strip was
+            // turned and nothing about what that strip's encoder is set to.
+            Self::ExecutorEncoder { target } => Command::ExecutorEncoder {
+                executor_id: executor_of(target, origin, context)?,
+                steps: input.steps()?,
+            },
             Self::ExecutorGo { target, direction } => Command::ExecutorGo {
                 target: PlaybackTarget::of_executor(executor_of(target, origin, context)?),
                 direction,
@@ -829,6 +837,26 @@ mod tests {
         );
     }
 
+    /// **The turn is passed on as steps**, to the executor under the strip, and
+    /// what it is worth is not this table's to say.
+    #[test]
+    fn a_strip_encoder_turns_the_encoder_of_the_executor_under_it() {
+        let table = Bindings::defaults();
+        assert_eq!(
+            table.command(
+                SurfaceEvent::Encoder {
+                    strip: 3,
+                    steps: -514
+                },
+                &context()
+            ),
+            Some(Command::ExecutorEncoder {
+                executor_id: ExecutorId::new(19),
+                steps: -514,
+            })
+        );
+    }
+
     #[test]
     fn the_main_fader_and_the_transport_act_on_the_selected_executor() {
         let table = Bindings::defaults();
@@ -1038,7 +1066,14 @@ mod tests {
             table.action(BoundControl::Jog),
             Some(SurfaceAction::AdjustParameter)
         );
-        assert_eq!(table.action(BoundControl::StripEncoder), None);
+        // **Bound since S60.** Until then the strip encoders were left alone and
+        // an executor's `encoderFunction` was a setting that no control read.
+        assert_eq!(
+            table.action(BoundControl::StripEncoder),
+            Some(SurfaceAction::ExecutorEncoder {
+                target: ExecutorTarget::Strip
+            })
+        );
         assert_eq!(
             table.action(BoundControl::StripButton {
                 button: StripButton::Select
@@ -1066,7 +1101,7 @@ mod tests {
             edited.set(control, None);
             assert_eq!(edited.action(control), None, "{control}");
         }
-        assert_eq!(edited.bound(), table.bound() - 3);
+        assert_eq!(edited.bound(), table.bound() - 4);
     }
 
     #[test]

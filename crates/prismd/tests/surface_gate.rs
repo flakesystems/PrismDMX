@@ -91,6 +91,7 @@ fn write_console_show_with_line(path: &Path, line: &str) {
             fader_function: ExecutorFaderFunction::Master,
             button_functions: Vec::new(),
             encoder_function: ExecutorEncoderFunction::Empty,
+            encoder_executor: None,
         })
         .unwrap();
     let mut session = SessionState::new();

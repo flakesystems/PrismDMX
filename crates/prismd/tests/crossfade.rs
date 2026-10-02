@@ -125,6 +125,7 @@ fn show_with(fader: ExecutorFaderFunction) -> prism_core::ShowFile {
                 ExecutorButtonFunction::Empty,
             ],
             encoder_function: ExecutorEncoderFunction::Empty,
+            encoder_executor: None,
         })
         .unwrap();
     file.show.mark_saved();

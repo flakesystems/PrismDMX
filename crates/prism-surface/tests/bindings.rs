@@ -181,14 +181,24 @@ fn a_strip_button_release_is_forwarded_and_a_panel_instruction_release_is_not() 
 }
 
 #[test]
-fn the_strip_encoder_is_empty() {
-    // §4.1 row 3: "Strip encoder | Empty". Empty is a binding decision, not an
-    // omission: the row exists and says nothing is on it.
+fn the_strip_encoder_turns_the_encoder_of_its_executor() {
+    // §4.1 row 3: "Strip encoder | Empty" — **the executor's** encoder function
+    // is Empty until somebody gives it one, and that is what the row says. The
+    // *control* has been bound since S60: before it the table left it alone,
+    // which is why an encoder set to Master did nothing at all.
     let table = Bindings::defaults();
-    assert_eq!(table.action(BoundControl::StripEncoder), None);
+    assert_eq!(
+        table.action(BoundControl::StripEncoder),
+        Some(SurfaceAction::ExecutorEncoder {
+            target: ExecutorTarget::Strip
+        })
+    );
     assert_eq!(
         table.command(SurfaceEvent::Encoder { strip: 4, steps: 2 }, &context()),
-        None
+        Some(Command::ExecutorEncoder {
+            executor_id: ExecutorId::new(20),
+            steps: 2,
+        })
     );
 }
 
@@ -501,8 +511,8 @@ fn the_whole_panel_is_bound_but_the_two_that_must_not_be() {
         );
     }
     // Sixty-two panel buttons, the four strip keys, the V-Pot push, the two
-    // faders and the wheel. The strip encoder is deliberately empty (§4.1).
-    assert_eq!(table.bound(), 62 + 5 + 1 + 1 + 1);
+    // faders, the wheel and — since S60 — the strip encoder.
+    assert_eq!(table.bound(), 62 + 5 + 1 + 1 + 1 + 1);
 }
 
 #[test]

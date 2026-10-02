@@ -73,6 +73,7 @@ function oneOf<T extends string>(value: string, list: readonly T[]): T | null {
 export const ACTION_KINDS = [
   "Nothing",
   "Executor master",
+  "Executor encoder",
   "Executor go +",
   "Executor go −",
   "Executor off",
@@ -185,7 +186,11 @@ export const CONSOLE_KINDS: readonly ActionKind[] = ["Console key"];
  * transport row is the part of the panel that keeps reaching PrismDMX while the
  * surface is also driving a sound console.
  */
-export const ADVANCED_KINDS: readonly ActionKind[] = ["Executor master", "Select executor"];
+export const ADVANCED_KINDS: readonly ActionKind[] = [
+  "Executor master",
+  "Executor encoder",
+  "Select executor",
+];
 
 /**
  * The kinds an operator adds one at a time — the **custom** section.
@@ -301,6 +306,8 @@ export function kindOf(action: SurfaceAction | null): ActionKind {
   switch (action.t) {
     case "ExecutorMaster":
       return "Executor master";
+    case "ExecutorEncoder":
+      return "Executor encoder";
     case "ExecutorGo":
       return action.direction === "Next" ? "Executor go +" : "Executor go −";
     case "ExecutorOff":
@@ -380,6 +387,8 @@ export function actionOfKind(
       return null;
     case "Executor master":
       return { t: "ExecutorMaster", target };
+    case "Executor encoder":
+      return { t: "ExecutorEncoder", target };
     case "Executor go +":
       return { t: "ExecutorGo", target, direction: "Next" };
     case "Executor go −":
@@ -481,6 +490,8 @@ export function actionText(action: SurfaceAction | null): string {
   switch (action.t) {
     case "ExecutorMaster":
       return `master of ${on(action.target)}`;
+    case "ExecutorEncoder":
+      return `encoder of ${on(action.target)}`;
     case "ExecutorGo":
       return `${action.direction === "Next" ? "go +" : "go −"} on ${on(action.target)}`;
     case "ExecutorOff":

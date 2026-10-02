@@ -34,7 +34,7 @@ selbst gehalten — ein Wort, das hier steht, gibt es dort also auch.
 
 | Wort | Was es tut |
 |---|---|
-| `assign` | Legt eine Cue-Liste auf einen Executor (`Assign Sequence 5 Executor 1`) oder sagt, was ein Fader, ein Encoder oder eine der vier Tasten tut (`Assign Executor 1 Fader XFade`). Welche der beiden Bedeutungen gilt, entscheidet das erste Hauptwort |
+| `assign` | Legt eine Cue-Liste auf einen Executor (`Assign Sequence 5 Executor 1`) oder sagt, was ein Fader, ein Encoder oder eine der vier Tasten tut (`Assign Executor 1 Fader XFade`), und welche Liste ein Encoder dreht (`Assign Executor 1 Encoder Executor 3`). Welche der beiden Bedeutungen gilt, entscheidet das erste Hauptwort |
 | `at` | Setzt einen Wert: `at 50`, `at full`, `at out`, `5 pan at 25` |
 | `clear` | Die drei Stufen: erst die Auswahl, dann die Werte, dann Bank und Seite |
 | `color` | Gibt einem Objekt eine Farbe für den Scribble-Strip: `Color Sequence 4 blue`. Ohne letztes Wort **nimmt es die Farbe weg** |

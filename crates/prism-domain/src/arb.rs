@@ -157,9 +157,12 @@ pub fn a_control() -> BoxedStrategy<crate::BoundControl> {
 pub fn an_action() -> BoxedStrategy<Option<crate::SurfaceAction>> {
     use crate::SurfaceAction as A;
     use crate::{ExecutorTarget, Step};
-    const ACTIONS: [Option<A>; 19] = [
+    const ACTIONS: [Option<A>; 20] = [
         None,
         Some(A::ExecutorMaster {
+            target: ExecutorTarget::Strip,
+        }),
+        Some(A::ExecutorEncoder {
             target: ExecutorTarget::Strip,
         }),
         Some(A::ExecutorGo {
@@ -449,6 +452,8 @@ fn command_group_3() -> BoxedStrategy<crate::Command> {
             }),
         (any::<ExecutorId>(), any::<u16>())
             .prop_map(|(executor_id, level)| C::SetExecutorMaster { executor_id, level }),
+        (any::<ExecutorId>(), any::<i32>())
+            .prop_map(|(executor_id, steps)| C::ExecutorEncoder { executor_id, steps }),
         (
             any::<FixtureId>(),
             any::<String>(),

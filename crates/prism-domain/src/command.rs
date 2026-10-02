@@ -1037,6 +1037,30 @@ pub enum Command {
         /// New position, `0..=65535`.
         level: u16,
     },
+    /// Turn an executor's encoder — **S60**.
+    ///
+    /// **What it does is the executor's own setting**, as the fader's
+    /// [`Self::SetExecutorMaster`] is: `Master` moves the master of the list
+    /// the encoder is on, `Speed` its rate, `Empty` nothing. **Which list that
+    /// is** is `Executor::encoder_executor` — the executor itself unless it was
+    /// told another.
+    ///
+    /// A command of its own and not a second meaning of `SetExecutorMaster`,
+    /// because the two do not agree on what the number is: a fader reports
+    /// *where it is* and an encoder reports *how far it was turned*. The
+    /// distance is in the **same unit** the programmer's encoders move
+    /// (`prism_surface::accel`), signed, and saturates at both ends of the
+    /// range rather than wrapping — a wheel spun hard against the stop stays at
+    /// the stop.
+    ///
+    /// It is not undoable and writes no journal entry, for the fader's reason: a
+    /// playback gesture is not a show edit.
+    ExecutorEncoder {
+        /// Whose encoder was turned.
+        executor_id: ExecutorId,
+        /// How far, and which way. Negative is anticlockwise.
+        steps: i32,
+    },
     /// Patch a fixture into a universe.
     ///
     /// Carries the start address only, not the individual DMX channels. The
@@ -1867,6 +1891,7 @@ impl Command {
                 | Self::ExecutorButton { .. }
                 | Self::Goto { .. }
                 | Self::SetExecutorMaster { .. }
+                | Self::ExecutorEncoder { .. }
                 | Self::Oops
                 | Self::Redo
                 | Self::SaveShow

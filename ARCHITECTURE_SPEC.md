@@ -650,6 +650,7 @@ interface Executor {
   faderFunction: ExecutorFaderFunction;
   buttonFunctions: ExecutorButtonFunction[];  // Rec / Solo / Mute / Select
   encoderFunction: ExecutorEncoderFunction;
+  encoderExecutor: ExecutorId | null;  // S60: whose list the encoder turns; null = its own
 }
 
 // One control of an executor and what it is to do — `Command::ConfigureExecutor`
@@ -659,6 +660,7 @@ interface Executor {
 type ExecutorChange =
   | { t: "Fader"; function: ExecutorFaderFunction }
   | { t: "Encoder"; function: ExecutorEncoderFunction }
+  | { t: "EncoderExecutor"; executorId: ExecutorId | null }   // S60
   | { t: "Button"; index: number; function: ExecutorButtonFunction };
 
 // Which of an executor's buttons a press names (S34). A `Slot` is a hardware

@@ -250,6 +250,7 @@ type Command =
   | { t: "ExecutorOff"; target: PlaybackTarget }
   | { t: "ExecutorButton"; executorId: ExecutorId; button: ExecutorButtonRef; pressed: boolean }
   | { t: "SetExecutorMaster"; executorId: ExecutorId; level: number }
+  | { t: "ExecutorEncoder"; executorId: ExecutorId; steps: number }   // S60: signed, anticlockwise < 0
   | { t: "PatchFixture"; /* … */ }     // an empty name is the profile's (S57)
   | { t: "PatchFixtures"; typeId: string; name: string; softwareDimmer: boolean;
       placements: PatchPlacement[] }   // S57: several new ones, embedded, one Oops
@@ -603,7 +604,7 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > one table* a property of the protocol rather than a race nobody has run yet.
 >
 > `action: null` **unbinds** the control, and that is a state worth being able to
-> reach: §4.1 leaves the strip encoder and four of the F-keys deliberately empty.
+> reach: §4.1 leaves four of the F-keys deliberately empty. (The strip encoder was a fifth until S60, which bound it to `ExecutorEncoder`.)
 >
 > **The reserved control is refused** — §4.3's SMPTE/Beats, by name and with the
 > reason, before anything is written. It is refused in `prism-core` rather than
@@ -666,8 +667,19 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > type ExecutorChange =
 >   | { t: "Fader"; function: ExecutorFaderFunction }
 >   | { t: "Encoder"; function: ExecutorEncoderFunction }
+>   | { t: "EncoderExecutor"; executorId: ExecutorId | null }   // S60
 >   | { t: "Button"; index: number; function: ExecutorButtonFunction };
 > ```
+>
+> **`EncoderExecutor` is S60's**, and says *whose* playback the encoder turns:
+> `null` is the executor's own, which is every encoder in a show written before
+> it. An executor naming **itself** is stored as `null` too, so there is one
+> spelling of *mine*, and a number nothing is on is refused
+> (`UnknownExecutor`) rather than stored. The turn itself is
+> `Command::ExecutorEncoder { executorId, steps }` — signed, in the programmer's
+> own unit, saturating at both ends of the range, **not undoable** for the
+> fader's reason, and answered by the executor's *own* `encoderFunction`
+> whatever its fader is doing.
 >
 > **One control at a time**, which is `OutputChange`'s rule and `CueProperty`'s
 > and `MachineChange`'s: a command carrying the whole executor would make a

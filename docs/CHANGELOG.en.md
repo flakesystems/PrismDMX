@@ -22,6 +22,29 @@ Every version so far is a **pre-release**.
 
 ---
 
+## Not yet released
+
+- **Encoders:** the encoders of the executor strips on the X-Touch **now do
+  something**. Until now their function could be set and nothing read it —
+  including in the crossfade case the owner missed them in on 2026-09-20; they
+  did nothing in **any** fader mode (B69). An encoder on *Master* moves its
+  list's master and one on *Speed* its rate, whatever the fader of the same
+  executor is doing.
+- **An encoder on another list:** an encoder may turn another executor's list
+  (`Assign Executor 1 Encoder Executor 3`, and `… Encoder Own` to take it back).
+  The *Executors* window has the choice under *Encoder on*; the last character of
+  the strip's lower line shows the encoder (`m`, `s`, `@` for another list, `-`).
+- **Mind the update:** the X-Touch's default binding has changed (the strip
+  encoder is bound), so a desk that was already set up **takes the new default
+  table** — anyone with a binding of their own exports it under *Settings →
+  Controls* before updating and imports it afterwards.
+- **Fixture library:** a freshly installed desk did not find the Open Fixture
+  Library it ships with and offered only generic fixtures in the Patch window —
+  the Mac installer carried it, but nothing recognised it. Fixed (B68, GitHub
+  #41).
+
+---
+
 ## 0.9.3 — the visualiser, a real fixture library, and a Mac
 
 The largest of the pre-releases so far. The owner held it back twice: once for

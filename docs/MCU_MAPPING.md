@@ -534,7 +534,7 @@ The "Acts on" column is the practical consequence of **D11**: some controls reac
 |---|---|---|---|
 | Strip fader 1–8 | `Master` of the cue list on that strip | Engine | yes — Empty / Master / Speed / XFade · **assignable from the desk since S45** (`Command::ConfigureExecutor`), and what it moves is the *cue list's* number, so two strips on one list move together — punch-list B18 |
 | Strip Rec / Solo / Mute / Select | `Go+` | Engine | yes — Empty / Go+ / Go− / LearnSpeed / Off / On / Flash / Toggle, **and a ninth that carries a command line** (S45) · **the binding is the button's *position* and the list above is the executor's own `buttonFunctions` (S34)**: `Command::ExecutorButton` carries which key was pressed, and `prism_core::Show::apply` resolves it. All nine are reachable, and since S45 all nine are **assignable** from the `Executors` window, from the command line and from a bound key |
-| Strip encoder | `Empty` | Engine | yes — Empty / Master / Speed · assignable from the desk since S45, like the fader and the four keys |
+| Strip encoder | `Empty` | Engine | yes — Empty / Master / Speed · assignable from the desk since S45, like the fader and the four keys · **bound to `ExecutorEncoder` since S60** — before it the *control* was unbound and the function was a setting nothing read, so an encoder set to `Master` did nothing in **every** fader mode, not only in a crossfade. `Empty` is still what an executor starts as, so a desk nobody has set up does what it did · **and it may turn another executor's list** (`Executor::encoderExecutor`), which is the executor's own setting like the function is |
 | Strip display | colour and name of the cue list, and **what the strip's five controls do** | — | — · **changed in S45** — see the departure below |
 | Main fader | `XFade` of the selected executor | Engine | yes — Empty / Master / XFade · **one command, `SetExecutorMaster`, routed through the executor's own `faderFunction` (S34)** — so a fader set to `XFade` crossfades, one set to `Speed` moves the speed master, and one set to `Empty` does nothing |
 | Flip button | `Go+` of the selected executor | Engine | yes |
@@ -558,7 +558,8 @@ any more: what an operator cannot see on an X-Touch is **what the four keys do**
 and the motor fader directly under the strip is already showing its own position.
 
 So the lower line is the strip's legend: the four keys as one character each,
-then the fader's. `prismd::surface::legend` is the table.
+then the fader's, **then the encoder's (S60)**. `prismd::surface::legend` is the
+table.
 
 | Character | Key | | Character | Fader |
 |---|---|---|---|---|
@@ -572,9 +573,22 @@ then the fader's. `prismd::surface::legend` is the table.
 | `*` | a command line | | | |
 | `-` | `Empty` | | | |
 
-So `><x- M` is *Go, Back, Off, nothing — and a master fader*, which fits the
-seven characters a scribble strip has (`prism_surface::STRIP_CHARS`) with one to
-spare. A slot with no executor is **blank** rather than five dashes: the line
+| Character | Encoder |
+|---|---|
+| `m` | `Master` — of its **own** executor's list |
+| `s` | `Speed` — of its own executor's list |
+| `@` | `Master` or `Speed`, of **another executor's** list |
+| `-` | `Empty` |
+
+So `><x- Mm` is *Go, Back, Off, nothing — a master fader, and a master encoder*,
+which is exactly the seven characters a scribble strip has
+(`prism_surface::STRIP_CHARS`); S45's legend was six and had one to spare, and
+S60 is what it was spared for. **The encoder's letters are lower case** so that
+`Mm` and `Ss` cannot be read as two faders. **Two owners are one character:** an
+encoder on another strip's list shows `@` and not what it does there, because
+*this is not this strip's* is what is worth seeing from across a desk, and the
+`Executors` window says the rest. With nothing on the encoder there is nothing to
+say about whose it is, so it is `-` either way. A slot with no executor is **blank** rather than five dashes: the line
 above it already says `Ex 5`, and a row of punctuation under that would read as
 five controls somebody had switched off.
 

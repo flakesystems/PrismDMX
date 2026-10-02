@@ -1117,6 +1117,95 @@ mod tests {
         assert!(!read.is_dirty());
     }
 
+    /// One executor row as PrismDMX **just before S60** wrote it: the whole
+    /// of S45's executor and nothing about whose list the encoder turns.
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct PreS60Executor {
+        id: u32,
+        sequence_id: Option<u32>,
+        fader_function: &'static str,
+        button_functions: Vec<&'static str>,
+        encoder_function: &'static str,
+    }
+
+    /// **S60's exit criterion: a show stored before it opens unchanged, and every
+    /// encoder is on its own executor as it was.**
+    ///
+    /// The row is written out by hand, without the new key, for the reason
+    /// `PreS45Executor` is: a fixture built by the code under test cannot say
+    /// anything about a file that code has never written. And the other
+    /// direction as well — an encoder given another executor's list is still
+    /// there after a save and a read, because the field is the thing being
+    /// stored and not a `#[serde(default)]` that happens to agree with it.
+    #[test]
+    fn a_pre_s60_executor_opens_with_its_encoder_on_its_own_and_a_foreign_one_survives_a_save() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("older.prism");
+        {
+            let mut store = ShowStore::open(&path).unwrap();
+            let mut file = crate::testkit::migration_fixture();
+            store.save(&mut file).unwrap();
+        }
+        {
+            let connection = rusqlite::Connection::open(&path).unwrap();
+            let row = PreS60Executor {
+                id: 17,
+                sequence_id: Some(5),
+                fader_function: "XFade",
+                button_functions: vec!["Go+", "Go-"],
+                encoder_function: "Master",
+            };
+            connection
+                .execute(
+                    "UPDATE executor SET document = ?2 WHERE id = ?1",
+                    rusqlite::params![i64::from(row.id), super::encode(&row).unwrap()],
+                )
+                .unwrap();
+        }
+
+        let mut store = ShowStore::open(&path).unwrap();
+        let mut read = store.read().unwrap();
+        let executor = read
+            .show
+            .executor(prism_domain::ExecutorId::new(17))
+            .expect("executor 17")
+            .clone();
+        assert_eq!(executor.encoder_executor, None, "every encoder is its own");
+        assert_eq!(
+            executor.encoder_function,
+            prism_domain::ExecutorEncoderFunction::Master
+        );
+        assert_eq!(
+            executor.fader_function,
+            prism_domain::ExecutorFaderFunction::XFade
+        );
+        assert!(!read.is_dirty(), "reading a file is not an edit");
+
+        // Now point it at another strip, save, and read it back.
+        read.show
+            .store_executor(crate::testkit::executor(18, Some(5)))
+            .unwrap();
+        read.show
+            .configure_executor(
+                prism_domain::ExecutorId::new(17),
+                &prism_domain::ExecutorChange::EncoderExecutor {
+                    executor_id: Some(prism_domain::ExecutorId::new(18)),
+                },
+            )
+            .unwrap();
+        store.save(&mut read).unwrap();
+        let again = ShowStore::open(&path).unwrap().read().unwrap();
+        assert_eq!(
+            again
+                .show
+                .executor(prism_domain::ExecutorId::new(17))
+                .unwrap()
+                .encoder_executor,
+            Some(prism_domain::ExecutorId::new(18))
+        );
+    }
+
     /// The frozen version-1 file, opened where opening it does no harm.
     ///
     /// Opening a file is what migrates it, so the one in the repository is

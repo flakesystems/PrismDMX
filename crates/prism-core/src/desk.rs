@@ -381,7 +381,13 @@ impl Default for Settings {
 /// It starts at **1** rather than at nought, because nought is what every
 /// configuration written before S59 reads as and those are exactly the ones this
 /// is meant to catch.
-pub const SURFACE_BINDINGS_GENERATION: u32 = 1;
+///
+/// **2 since S60**, which binds `Strip[*].Encoder` to `ExecutorEncoder` — until
+/// then the strip encoders were bound to nothing and an executor's
+/// `encoderFunction` was a setting no control read. A desk that was set up
+/// before keeps a table with that row empty, so without the bump the encoders
+/// would work on a fresh install and not on the desk that most needs them.
+pub const SURFACE_BINDINGS_GENERATION: u32 = 2;
 
 /// The port the WebSocket listener binds unless it is told otherwise.
 pub const DEFAULT_WEBSOCKET_PORT: u16 = 7373;

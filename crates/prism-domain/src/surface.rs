@@ -472,9 +472,29 @@ pub enum Step {
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 #[serde(tag = "t", rename_all_fields = "camelCase")]
 pub enum SurfaceAction {
-    /// Move an executor's master — a fader, or an encoder.
+    /// Move an executor's master — a fader.
+    ///
+    /// **A fader only, since S60.** The comment said *or an encoder* since S22
+    /// and was never true: an encoder reports steps and a master wants a level,
+    /// so a binding of this action to an encoder resolved to nothing. An encoder
+    /// is [`Self::ExecutorEncoder`]'s.
     ExecutorMaster {
         /// Whose master.
+        target: ExecutorTarget,
+    },
+    /// Turn an executor's encoder — **S60**.
+    ///
+    /// What that does is the executor's own `encoder_function` and the list it
+    /// does it to is its `encoder_executor`, so one binding on the strip
+    /// encoders serves every executor in whatever way each is set up — which
+    /// is why this carries nothing but a target.
+    ///
+    /// **Its lamp is dark.** An encoder has no light under it
+    /// (`docs/MCU_MAPPING.md` §2.7), and a key bound to this has nothing to
+    /// show: it is a *turn*, not a state. `prismd::lamp` says so in a match arm
+    /// of its own so the choice is a decision and not an omission.
+    ExecutorEncoder {
+        /// Whose encoder.
         target: ExecutorTarget,
     },
     /// Step an executor's sequence.
@@ -1084,6 +1104,9 @@ mod tests {
         );
         for action in [
             SurfaceAction::ExecutorMaster {
+                target: ExecutorTarget::Strip,
+            },
+            SurfaceAction::ExecutorEncoder {
                 target: ExecutorTarget::Strip,
             },
             SurfaceAction::ExecutorGo {

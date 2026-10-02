@@ -296,6 +296,7 @@ fn desk_show() -> ShowFile {
             fader_function: fader,
             button_functions: buttons,
             encoder_function: encoder,
+            encoder_executor: None,
         })
         .expect("the sequence exists");
         // The level is the cue list's since S45, so a slot with no list has

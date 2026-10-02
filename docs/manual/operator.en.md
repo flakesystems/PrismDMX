@@ -626,6 +626,27 @@ The last line is the interesting one: a key can **send a line**. That makes
 everything you can type into a key as well — and the same line can go on an
 X-Touch key, so that window, line and hardware are one path rather than three.
 
+**An encoder has a function of its own, and a list of its own.** The function
+(`Master`, `Speed`) is what it does; the list is the executor it does it to.
+Left alone it turns its own executor's list, as it always did. Two more lines
+send it elsewhere and bring it back:
+
+```
+Assign Executor 1 Encoder Executor 3   turn executor 3's list instead
+Assign Executor 1 Encoder Own          and back to its own
+```
+
+The point of it is to ride one list's crossfade with the fader while the
+encoder beside it rides another list's rate — the *Executors* window has the
+same choice under **Encoder on**, across every page. **The encoder never asks
+what the fader does:** `Master` moves the list's master whether the fader is a
+master, a crossfade or nothing. One click of an X-Touch encoder moves a master
+by about 0.4 per cent and a rate by about 3 per cent of normal; a fast turn
+moves it further, and the end of the range stops it rather than wrapping.
+
+The last character of a strip's lower line is the encoder: `m` for master, `s`
+for speed, `-` for nothing, and `@` when it is on **another executor's** list.
+
 > A line with punctuation in it **belongs in quotes**. `go+`, `+` and `,` are
 > rewritten by the tokeniser so that `1 + 2` means what it says. So:
 > `Command "Go+ Sequence 3"`, not `Command Go+ Sequence 3`.

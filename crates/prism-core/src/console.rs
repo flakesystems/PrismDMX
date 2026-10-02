@@ -955,7 +955,8 @@ fn assign_line(words: &[Token]) -> ConsoleReading {
 const EXECUTOR_BUTTONS: u32 = 4;
 
 /// `assign executor 1 fader master`, `… button 2 go+`, `… encoder speed`, and
-/// `… button 3 command "Go+ Sequence 3"` — **S45**, punch-list entry B15.
+/// `… button 3 command "Go+ Sequence 3"` — **S45**, punch-list entry B15. And, since
+/// **S60**, `… encoder executor 3`: *whose* playback the encoder turns.
 ///
 /// The control words are `fader`, `encoder` and `button <n>`; a button is
 /// numbered **from one**, because that is how an operator counts the keys under
@@ -989,7 +990,38 @@ fn assign_control_line(executor_id: ExecutorId, rest: &[Token]) -> ConsoleReadin
             change_command(executor_id, ExecutorChange::Fader { function })
         }
         "encoder" => {
-            let names = encoder_words();
+            // **Whose list, rather than what it does** — S60. `executor 3` puts
+            // the encoder on executor 3's playback and `own` takes it back to
+            // the executor it belongs to; a number that is this very executor
+            // is `own` as well, and is stored as such (`Show::configure_executor`).
+            if matches_word("executor", rest.get(1)) {
+                let Some(target) = rest.get(2).and_then(|word| whole_number(&word.text)) else {
+                    return refused(
+                        "the encoder on which executor? Try \"assign executor 1 encoder executor 3\".",
+                    );
+                };
+                if rest.len() > 3 {
+                    return too_much("assign", rest);
+                }
+                return change_command(
+                    executor_id,
+                    ExecutorChange::EncoderExecutor {
+                        executor_id: Some(ExecutorId::new(target)),
+                    },
+                );
+            }
+            if matches_word("own", rest.get(1)) {
+                if rest.len() > 2 {
+                    return too_much("assign", rest);
+                }
+                return change_command(
+                    executor_id,
+                    ExecutorChange::EncoderExecutor { executor_id: None },
+                );
+            }
+            let mut names = encoder_words();
+            names.push("executor <n>".to_owned());
+            names.push("own".to_owned());
             let Some(function) = ExecutorEncoderFunction::ALL
                 .into_iter()
                 .find(|choice| matches_word(encoder_word(*choice), rest.get(1)))
@@ -1806,6 +1838,10 @@ fn control_text(change: &ExecutorChange) -> String {
     match change {
         ExecutorChange::Fader { function } => format!("fader to {}", fader_name(*function)),
         ExecutorChange::Encoder { function } => format!("encoder to {}", encoder_name(*function)),
+        ExecutorChange::EncoderExecutor { executor_id } => match executor_id {
+            Some(executor_id) => format!("encoder on executor {executor_id}"),
+            None => "encoder on its own executor".to_owned(),
+        },
         ExecutorChange::Button { index, function } => {
             // Counted from one, which is how an operator counts the keys under a
             // fader; the command counts from zero the way the hardware does.

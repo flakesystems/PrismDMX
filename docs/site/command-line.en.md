@@ -33,7 +33,7 @@ test — so a word that exists here exists there.
 
 | Word | What it does |
 |---|---|
-| `assign` | Puts a cue list on an executor (`Assign Sequence 5 Executor 1`), or says what a fader, an encoder or one of the four keys does (`Assign Executor 1 Fader XFade`). Which of the two it means is decided by the first noun |
+| `assign` | Puts a cue list on an executor (`Assign Sequence 5 Executor 1`), or says what a fader, an encoder or one of the four keys does (`Assign Executor 1 Fader XFade`), and which executor's list an encoder turns (`Assign Executor 1 Encoder Executor 3`). Which of the two it means is decided by the first noun |
 | `at` | Sets a value: `at 50`, `at full`, `at out`, `5 pan at 25` |
 | `clear` | The three stages: first the selection, then the values, then the bank and page |
 | `color` | Gives an object a colour for the scribble strip: `Color Sequence 4 blue`. With no last word it **takes the colour away** |

@@ -187,6 +187,7 @@ has not said they want to move there.
 | `Assign Sequence 5 Executor 1` | puts a cue list on a fader |
 | `Assign Executor 1 Fader Master` | says what that executor's fader does — `Empty`, `Master`, `Speed`, `XFade`, `Fade` |
 | `Assign Executor 1 Encoder Speed` | the same for its encoder — `Empty`, `Master`, `Speed` |
+| `Assign Executor 1 Encoder Executor 3` | **whose list** that encoder turns — executor 3's, on any page. `Encoder Own` takes it back; naming itself is the same thing (S60) |
 | `Assign Executor 1 Button 2 Go+` | the same for one of its four keys, **numbered from one** |
 | `Assign Executor 1 Button 4 Command "Go+ Sequence 3"` | the custom row: that key sends this line |
 | `Oops` | takes the last edit back. **Typed** and run it is always an undo; the **key** is a backspace first (§1) |

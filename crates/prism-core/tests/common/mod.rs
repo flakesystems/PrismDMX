@@ -153,6 +153,7 @@ pub fn executor(id: u32, sequence_id: Option<u32>) -> Executor {
         fader_function: ExecutorFaderFunction::Master,
         button_functions: Vec::new(),
         encoder_function: ExecutorEncoderFunction::Empty,
+        encoder_executor: None,
     }
 }
 

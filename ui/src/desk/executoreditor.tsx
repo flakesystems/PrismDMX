@@ -50,11 +50,14 @@ import {
   faderName,
 } from "./functions";
 import type { FixedButtonFunction } from "./functions";
-import { EXECUTOR_BUTTONS, pageStrips, selectedExecutor } from "./session";
+import { EXECUTOR_BUTTONS, encoderTargets, pageStrips, selectedExecutor } from "./session";
 import type { ExecutorStrip } from "./session";
 
 /** The value the custom row carries in a `<select>`, which no enum spelling is. */
 const CUSTOM = "Command";
+
+/** The value *its own executor* carries in the encoder's list, which no number is. */
+const OWN = "own";
 
 /** The editor, under the strip. */
 export function ExecutorEditor({
@@ -76,14 +79,14 @@ export function ExecutorEditor({
             : `Executor ${String(chosen)} is not on this page.`}
         </p>
       ) : (
-        <Rows strip={strip} />
+        <Rows strip={strip} show={show} />
       )}
     </section>
   );
 }
 
 /** The six rows of one executor. */
-function Rows({ strip }: { readonly strip: ExecutorStrip }) {
+function Rows({ strip, show }: { readonly strip: ExecutorStrip; readonly show: JsonValue }) {
   const { run } = useConsole();
   const assign = (words: string): void => {
     run(`Assign Executor ${String(strip.executorId)} ${words}`);
@@ -125,10 +128,58 @@ function Rows({ strip }: { readonly strip: ExecutorStrip }) {
           ))}
         </select>
       </Row>
+      <EncoderOnRow strip={strip} show={show} assign={assign} />
       {Array.from({ length: EXECUTOR_BUTTONS }, (_unused, index) => (
         <ButtonRow key={index} index={index} strip={strip} assign={assign} />
       ))}
     </div>
+  );
+}
+
+/**
+ * **Whose list the encoder turns** — S60.
+ *
+ * The row under *Encoder*: *Its own* is what every encoder was before this
+ * existed, and the others are the show's executors. It writes the same kind of
+ * line every other chooser here does — `Assign Executor 1 Encoder Executor 3`,
+ * `… Encoder Own` — so a typed line, a bound key and this window end in one
+ * `ConfigureExecutor`.
+ *
+ * Nothing is chosen *for* an encoder whose function is `Empty`, but the row is
+ * drawn all the same: an operator setting a strip up points it first and gives
+ * it a function second as often as the other way round, and a row that vanished
+ * until the function was chosen would make that order a trap.
+ */
+function EncoderOnRow({
+  strip,
+  show,
+  assign,
+}: {
+  readonly strip: ExecutorStrip;
+  readonly show: JsonValue;
+  readonly assign: (words: string) => void;
+}) {
+  const targets = encoderTargets(show, strip.executorId);
+  const chosen = strip.encoderExecutor === null ? OWN : String(strip.encoderExecutor);
+  return (
+    <Row label="Encoder on" testId="editor-encoder-on">
+      <select
+        data-testid="editor-encoder-on"
+        value={chosen}
+        onChange={(event) => {
+          assign(event.target.value === OWN ? "Encoder Own" : `Encoder Executor ${event.target.value}`);
+        }}
+      >
+        <option value={OWN}>Its own executor</option>
+        {targets.map((target) => (
+          <option key={target.executorId} value={String(target.executorId)}>
+            {target.name === null
+              ? `Executor ${String(target.executorId)}`
+              : `Executor ${String(target.executorId)} — ${target.name}`}
+          </option>
+        ))}
+      </select>
+    </Row>
   );
 }
 

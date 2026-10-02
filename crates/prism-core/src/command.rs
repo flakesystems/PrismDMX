@@ -40,12 +40,34 @@
 //! anyway, and it changes nothing.
 
 use prism_domain::{
-    Command, Delta, ExecutorButtonFunction, ExecutorButtonRef, ExecutorFaderFunction, ExecutorId,
-    Fixture, FixtureId, GoDirection, JsonPatchOp, NoticeLevel, PlaybackId, PlaybackTarget,
-    SequenceId, Vec3,
+    Command, Delta, ExecutorButtonFunction, ExecutorButtonRef, ExecutorEncoderFunction,
+    ExecutorFaderFunction, ExecutorId, Fixture, FixtureId, GoDirection, JsonPatchOp, NoticeLevel,
+    PlaybackId, PlaybackTarget, SequenceId, Vec3,
 };
 
 use crate::show::{Show, ShowError};
+
+/// How many of the units an encoder reports make one unit of a **speed**
+/// — S60.
+///
+/// An encoder's steps are in the programmer's unit, where one detent is one
+/// coarse DMX step and so 257 parts of 65 535 (`prism_surface::accel`). That
+/// is right for a level and wrong for a rate, because `SPEED_UNITY` is 1 024:
+/// a detent of 257 would be a quarter of normal speed, and the fastest turn
+/// nine times it. An eighth makes a careful click about three per cent of
+/// normal and a fast spin a little over normal speed, which is the range a
+/// rate wheel is for.
+const ENCODER_SPEED_DIVISOR: i32 = 8;
+
+/// A level moved by a signed distance, **stopping at the ends** — S60.
+///
+/// Saturating, not wrapping: an encoder turned hard against the stop must stay
+/// at the stop, and a master that wrapped from nought to full would put a
+/// stage into blackout or blaze for one careless turn.
+fn nudged(level: u16, steps: i32) -> u16 {
+    let moved = i64::from(level) + i64::from(steps);
+    u16::try_from(moved.clamp(0, i64::from(u16::MAX))).unwrap_or(u16::MAX)
+}
 
 /// Something the show model has decided but cannot itself carry out.
 ///
@@ -591,6 +613,9 @@ impl Show {
             Command::SetExecutorMaster { executor_id, level } => {
                 self.apply_executor_fader(*executor_id, *level)
             }
+            Command::ExecutorEncoder { executor_id, steps } => {
+                self.apply_executor_encoder(*executor_id, *steps)
+            }
             Command::PatchFixture {
                 id,
                 name,
@@ -942,6 +967,84 @@ impl Show {
             }
             // Answered above, before the cue list was asked for.
             ExecutorFaderFunction::Empty => Ok(Applied::default()),
+        }
+    }
+
+    /// Resolves an encoder turn against the executor's own `encoder_function`
+    /// and `encoder_executor` — **S60**.
+    ///
+    /// # It is not the fader
+    ///
+    /// The encoder reads **its own** function and never the fader's. The first
+    /// version of this question — *the encoders did nothing with the fader in
+    /// crossfade mode* — was a belief that the two were one path, and they were
+    /// not even that: before this existed nothing read `encoder_function` at
+    /// all. `Master` here moves the list's master number whatever the fader on
+    /// the same executor is doing with *its* function, so a hand can ride a
+    /// crossfade with one control and the level of the same list with the
+    /// other.
+    ///
+    /// # Whose list
+    ///
+    /// `encoder_executor`, or this executor's own when it has none. The
+    /// function is **this** executor's and the list is **that** executor's: an
+    /// encoder set to `Master` on strip 3 and pointed at executor 7 moves the
+    /// master of whatever list is on 7, and executor 7's own encoder function is
+    /// not consulted — it is a statement about 7's encoder.
+    ///
+    /// # What it answers
+    ///
+    /// Nothing for an `Empty` encoder or a turn of nought, before the list is
+    /// asked for — the fader's rule for `Empty`. Nothing either when the number
+    /// is already at the end it was turned towards: a patch that changed
+    /// nothing would tell every client that something moved. An executor that
+    /// is not there is refused, and so is a target with no list on it, because
+    /// an encoder pointed at an empty strip is a configuration an operator can
+    /// act on.
+    fn apply_executor_encoder(&mut self, id: ExecutorId, steps: i32) -> Result<Applied, ShowError> {
+        let Some(executor) = self.executor(id) else {
+            return Err(ShowError::UnknownExecutor(id));
+        };
+        let function = executor.encoder_function;
+        if function == ExecutorEncoderFunction::Empty || steps == 0 {
+            return Ok(Applied::default());
+        }
+        let on = executor.encoder_executor.unwrap_or(id);
+        let playback = self.playback_of(&PlaybackTarget::of_executor(on))?;
+        let Some(sequence) = self.sequence(playback.sequence()) else {
+            return Err(ShowError::UnknownSequence(playback.sequence()));
+        };
+        match function {
+            ExecutorEncoderFunction::Master => {
+                let level = nudged(sequence.master_level, steps);
+                if level == sequence.master_level {
+                    return Ok(Applied::default());
+                }
+                let ops = self.set_sequence_master(playback.sequence(), level)?;
+                Ok(Applied {
+                    deltas: vec![Delta::ShowPatch { ops }],
+                    effects: vec![Effect::SetExecutorMaster {
+                        executor: playback,
+                        level,
+                    }],
+                })
+            }
+            ExecutorEncoderFunction::Speed => {
+                let speed = nudged(sequence.speed, steps / ENCODER_SPEED_DIVISOR);
+                if speed == sequence.speed {
+                    return Ok(Applied::default());
+                }
+                let ops = self.set_sequence_speed(playback.sequence(), speed)?;
+                Ok(Applied {
+                    deltas: vec![Delta::ShowPatch { ops }],
+                    effects: vec![Effect::ExecutorSpeed {
+                        executor: playback,
+                        speed,
+                    }],
+                })
+            }
+            // Answered above, before the cue list was asked for.
+            ExecutorEncoderFunction::Empty => Ok(Applied::default()),
         }
     }
 
@@ -1484,6 +1587,337 @@ mod tests {
             }),
             Err(ShowError::UnknownExecutor(ExecutorId::new(9)))
         );
+    }
+
+    /// **S60 — an encoder has a function of its own, and the fader's is not it.**
+    ///
+    /// The fader on this executor is a crossfade, which is the setting the owner
+    /// met the fault in on 2026-09-20. The encoder is `Master`, and what it moves
+    /// is the list's master — **not** the crossfade position, which is the number
+    /// the *fader* writes. Eight detents of the V-Pot curve are 36 × 257 = 9 252.
+    #[test]
+    fn an_encoder_moves_the_master_of_its_list_whatever_the_fader_does() {
+        let mut show = show();
+        for function in [
+            ExecutorFaderFunction::XFade,
+            ExecutorFaderFunction::Fade,
+            ExecutorFaderFunction::Master,
+            ExecutorFaderFunction::Speed,
+            ExecutorFaderFunction::Empty,
+        ] {
+            let id = ExecutorId::new(0);
+            show.apply(&Command::ConfigureExecutor {
+                executor_id: id,
+                change: ExecutorChange::Fader { function },
+            })
+            .unwrap();
+            show.apply(&Command::ConfigureExecutor {
+                executor_id: id,
+                change: ExecutorChange::Encoder {
+                    function: ExecutorEncoderFunction::Master,
+                },
+            })
+            .unwrap();
+            show.set_sequence_master(SequenceId::new(1), u16::MAX)
+                .unwrap();
+
+            let applied = show
+                .apply(&Command::ExecutorEncoder {
+                    executor_id: id,
+                    steps: -9_252,
+                })
+                .unwrap();
+            assert_eq!(
+                applied.effects,
+                vec![Effect::SetExecutorMaster {
+                    executor: PlaybackId::of_sequence(SequenceId::new(1)),
+                    level: 56_283,
+                }],
+                "{function:?}"
+            );
+            assert!(matches!(
+                applied.deltas.as_slice(),
+                [Delta::ShowPatch { ops }, ..] if ops == &vec![JsonPatchOp::Replace {
+                    path: "/sequences/1/masterLevel".to_owned(),
+                    value: JsonValue::Int(56_283),
+                }]
+            ));
+            let list = show.sequence(SequenceId::new(1)).unwrap();
+            assert_eq!(list.master_level, 56_283, "{function:?}");
+            assert_eq!(
+                list.crossfade_position, 0,
+                "{function:?}: the encoder wrote the number the fader owns"
+            );
+        }
+    }
+
+    #[test]
+    fn an_encoder_set_to_speed_moves_the_rate_in_its_own_unit() {
+        let mut show = show();
+        show.apply(&Command::ConfigureExecutor {
+            executor_id: ExecutorId::new(0),
+            change: ExecutorChange::Encoder {
+                function: ExecutorEncoderFunction::Speed,
+            },
+        })
+        .unwrap();
+        // One detent is 257 in the programmer's unit, and an eighth of it is 32
+        // in a speed's: three per cent of normal, not a quarter of it.
+        let applied = show
+            .apply(&Command::ExecutorEncoder {
+                executor_id: ExecutorId::new(0),
+                steps: 257,
+            })
+            .unwrap();
+        assert_eq!(
+            applied.effects,
+            vec![Effect::ExecutorSpeed {
+                executor: PlaybackId::of_sequence(SequenceId::new(1)),
+                speed: prism_domain::SPEED_UNITY + 32,
+            }]
+        );
+        assert_eq!(
+            show.sequence(SequenceId::new(1)).unwrap().speed,
+            prism_domain::SPEED_UNITY + 32
+        );
+        // And a turn too small to be worth a unit of speed is nothing.
+        assert_eq!(
+            show.apply(&Command::ExecutorEncoder {
+                executor_id: ExecutorId::new(0),
+                steps: 7,
+            })
+            .unwrap(),
+            Applied::default()
+        );
+    }
+
+    #[test]
+    fn an_encoder_with_nothing_on_it_or_turned_nowhere_changes_nothing() {
+        let mut show = show();
+        let turn = |steps| Command::ExecutorEncoder {
+            executor_id: ExecutorId::new(0),
+            steps,
+        };
+        // `Empty` is what every executor starts as, and it is answered before the
+        // cue list is asked for.
+        assert_eq!(show.apply(&turn(500)).unwrap(), Applied::default());
+        show.apply(&Command::ConfigureExecutor {
+            executor_id: ExecutorId::new(0),
+            change: ExecutorChange::Encoder {
+                function: ExecutorEncoderFunction::Master,
+            },
+        })
+        .unwrap();
+        assert_eq!(show.apply(&turn(0)).unwrap(), Applied::default());
+        // The list is at full, so a turn upwards has nowhere to go and says
+        // nothing — a patch that moved nothing would tell every client it had.
+        assert_eq!(show.apply(&turn(9_252)).unwrap(), Applied::default());
+        // And a slot with no executor at all is a refusal, like the fader's.
+        assert_eq!(
+            show.apply(&Command::ExecutorEncoder {
+                executor_id: ExecutorId::new(9),
+                steps: 1,
+            }),
+            Err(ShowError::UnknownExecutor(ExecutorId::new(9)))
+        );
+    }
+
+    /// **A wheel spun against the stop stays at the stop.**
+    #[test]
+    fn an_encoder_stops_at_both_ends_and_does_not_wrap() {
+        let mut show = show();
+        show.apply(&Command::ConfigureExecutor {
+            executor_id: ExecutorId::new(0),
+            change: ExecutorChange::Encoder {
+                function: ExecutorEncoderFunction::Master,
+            },
+        })
+        .unwrap();
+        show.apply(&Command::ExecutorEncoder {
+            executor_id: ExecutorId::new(0),
+            steps: i32::MIN,
+        })
+        .unwrap();
+        assert_eq!(show.sequence(SequenceId::new(1)).unwrap().master_level, 0);
+        show.apply(&Command::ExecutorEncoder {
+            executor_id: ExecutorId::new(0),
+            steps: i32::MAX,
+        })
+        .unwrap();
+        assert_eq!(
+            show.sequence(SequenceId::new(1)).unwrap().master_level,
+            u16::MAX
+        );
+    }
+
+    /// **The encoder on one strip, the list on another** — S60's whole point.
+    ///
+    /// Executor 0's encoder is `Master` and is put on executor 2; 2's own encoder
+    /// is `Empty`, and that is **not** consulted: the function is the encoder's
+    /// owner's and the list is the one it was pointed at.
+    #[test]
+    fn an_encoder_turns_the_list_of_the_executor_it_was_given() {
+        let mut show = show();
+        show.store_sequence(sequence(2, vec![cue("1", 1, AttributeType::Red, 65535)]))
+            .unwrap();
+        show.store_executor(executor(2, Some(2))).unwrap();
+        show.apply(&Command::ConfigureExecutor {
+            executor_id: ExecutorId::new(0),
+            change: ExecutorChange::Encoder {
+                function: ExecutorEncoderFunction::Master,
+            },
+        })
+        .unwrap();
+        show.apply(&Command::ConfigureExecutor {
+            executor_id: ExecutorId::new(0),
+            change: ExecutorChange::EncoderExecutor {
+                executor_id: Some(ExecutorId::new(2)),
+            },
+        })
+        .unwrap();
+
+        let applied = show
+            .apply(&Command::ExecutorEncoder {
+                executor_id: ExecutorId::new(0),
+                steps: -9_252,
+            })
+            .unwrap();
+        assert_eq!(
+            applied.effects,
+            vec![Effect::SetExecutorMaster {
+                executor: PlaybackId::of_sequence(SequenceId::new(2)),
+                level: 56_283,
+            }]
+        );
+        assert_eq!(
+            show.sequence(SequenceId::new(1)).unwrap().master_level,
+            u16::MAX,
+            "the list on the encoder's own executor was touched"
+        );
+        // Executor 2's own encoder is `Empty` and turning it does nothing, which
+        // is what keeps *whose function* and *whose list* two questions.
+        assert_eq!(
+            show.apply(&Command::ExecutorEncoder {
+                executor_id: ExecutorId::new(2),
+                steps: -9_252,
+            })
+            .unwrap(),
+            Applied::default()
+        );
+        // Taking it back gives the encoder to its own executor again.
+        show.apply(&Command::ConfigureExecutor {
+            executor_id: ExecutorId::new(0),
+            change: ExecutorChange::EncoderExecutor { executor_id: None },
+        })
+        .unwrap();
+        show.apply(&Command::ExecutorEncoder {
+            executor_id: ExecutorId::new(0),
+            steps: -9_252,
+        })
+        .unwrap();
+        assert_eq!(
+            show.sequence(SequenceId::new(1)).unwrap().master_level,
+            56_283
+        );
+    }
+
+    /// An encoder pointed at a strip with no list is refused when it is
+    /// turned, and a strip nothing is on cannot be pointed at.
+    #[test]
+    fn an_encoder_pointed_at_nothing_is_a_complaint_and_not_a_silence() {
+        let mut show = show();
+        let id = ExecutorId::new(0);
+        show.apply(&Command::ConfigureExecutor {
+            executor_id: id,
+            change: ExecutorChange::Encoder {
+                function: ExecutorEncoderFunction::Master,
+            },
+        })
+        .unwrap();
+        // Executor 1 exists and has no cue list.
+        show.apply(&Command::ConfigureExecutor {
+            executor_id: id,
+            change: ExecutorChange::EncoderExecutor {
+                executor_id: Some(ExecutorId::new(1)),
+            },
+        })
+        .unwrap();
+        assert_eq!(
+            show.apply(&Command::ExecutorEncoder {
+                executor_id: id,
+                steps: -1_000,
+            }),
+            Err(ShowError::ExecutorHasNoSequence(ExecutorId::new(1)))
+        );
+        // Executor 7 does not exist at all.
+        assert_eq!(
+            show.apply(&Command::ConfigureExecutor {
+                executor_id: id,
+                change: ExecutorChange::EncoderExecutor {
+                    executor_id: Some(ExecutorId::new(7)),
+                },
+            }),
+            Err(ShowError::UnknownExecutor(ExecutorId::new(7)))
+        );
+    }
+
+    /// **Yourself is no one else**, and one spelling of *mine*.
+    #[test]
+    fn an_encoder_given_its_own_executor_is_stored_as_having_none() {
+        let mut show = show();
+        let id = ExecutorId::new(0);
+        // Already on its own: nothing to say.
+        assert_eq!(
+            show.apply(&Command::ConfigureExecutor {
+                executor_id: id,
+                change: ExecutorChange::EncoderExecutor { executor_id: None },
+            })
+            .unwrap(),
+            Applied::default()
+        );
+        assert_eq!(
+            show.apply(&Command::ConfigureExecutor {
+                executor_id: id,
+                change: ExecutorChange::EncoderExecutor {
+                    executor_id: Some(id),
+                },
+            })
+            .unwrap(),
+            Applied::default()
+        );
+        let applied = show
+            .apply(&Command::ConfigureExecutor {
+                executor_id: id,
+                change: ExecutorChange::EncoderExecutor {
+                    executor_id: Some(ExecutorId::new(1)),
+                },
+            })
+            .unwrap();
+        assert!(matches!(
+            applied.deltas.as_slice(),
+            [Delta::ShowPatch { ops }, ..] if ops == &vec![JsonPatchOp::Replace {
+                path: "/executors/0/encoderExecutor".to_owned(),
+                value: JsonValue::Int(1),
+            }]
+        ));
+        // And back to itself: `null` on the wire, where every client already
+        // reads a missing owner as none.
+        let applied = show
+            .apply(&Command::ConfigureExecutor {
+                executor_id: id,
+                change: ExecutorChange::EncoderExecutor {
+                    executor_id: Some(id),
+                },
+            })
+            .unwrap();
+        assert!(matches!(
+            applied.deltas.as_slice(),
+            [Delta::ShowPatch { ops }, ..] if ops == &vec![JsonPatchOp::Replace {
+                path: "/executors/0/encoderExecutor".to_owned(),
+                value: JsonValue::Null,
+            }]
+        ));
+        assert_eq!(show.executor(id).unwrap().encoder_executor, None);
     }
 
     /// The custom row: a key that sends a line an operator wrote.

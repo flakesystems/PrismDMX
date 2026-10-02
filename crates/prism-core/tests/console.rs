@@ -275,6 +275,57 @@ fn a_function_is_assigned_to_one_of_an_executors_controls() {
     );
 }
 
+/// **S60, at the grammar.** *Whose* list the encoder turns is sayable too, so the
+/// editor's new row is a line like every other one and a bound key can carry it.
+#[test]
+fn an_encoder_is_given_an_executor_of_its_own_or_taken_back() {
+    assert_eq!(
+        commands("assign executor 1 encoder executor 3"),
+        vec![Command::ConfigureExecutor {
+            executor_id: ExecutorId::new(1),
+            change: ExecutorChange::EncoderExecutor {
+                executor_id: Some(ExecutorId::new(3)),
+            },
+        }]
+    );
+    assert_eq!(
+        commands("Assign Executor 1 Encoder Own"),
+        vec![Command::ConfigureExecutor {
+            executor_id: ExecutorId::new(1),
+            change: ExecutorChange::EncoderExecutor { executor_id: None },
+        }]
+    );
+    // And the readout says it in words, so an operator can check it before Enter.
+    let reading = |line: &str| reading_text(&parse_command_line(line));
+    assert_eq!(
+        reading("assign executor 1 encoder executor 3"),
+        "set the encoder on executor 3 of executor 1"
+    );
+    assert_eq!(
+        reading("assign executor 1 encoder own"),
+        "set the encoder on its own executor of executor 1"
+    );
+}
+
+#[test]
+fn an_encoder_executor_that_is_not_a_number_is_a_complaint_an_operator_can_act_on() {
+    assert!(
+        message("assign executor 1 encoder executor").contains("the encoder on which executor")
+    );
+    assert!(
+        message("assign executor 1 encoder executor three")
+            .contains("the encoder on which executor")
+    );
+    assert!(message("assign executor 1 encoder executor 3 and then some").contains("says more"));
+    assert!(message("assign executor 1 encoder own please").contains("says more"));
+    // The list of what an encoder takes names the two new words as well.
+    let said = message("assign executor 1 encoder sideways");
+    assert!(
+        said.contains("executor <n>") && said.contains("own"),
+        "{said}"
+    );
+}
+
 /// The custom row — a key that sends a line an operator wrote.
 #[test]
 fn a_key_is_given_a_command_line_quoted_or_not() {

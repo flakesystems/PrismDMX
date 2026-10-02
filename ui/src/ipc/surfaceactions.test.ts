@@ -51,6 +51,7 @@ describe("every action a key can be bound to", () => {
     expect(new Set(actions.map((action) => action?.t))).toEqual(
       new Set([
         "ExecutorMaster",
+        "ExecutorEncoder",
         "ExecutorGo",
         "ExecutorOff",
         "ExecutorOn",

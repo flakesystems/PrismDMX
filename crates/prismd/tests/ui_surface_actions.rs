@@ -61,6 +61,9 @@ fn every_action() -> Vec<SurfaceAction> {
             target: ExecutorTarget::Selected,
             direction: GoDirection::Prev,
         },
+        SurfaceAction::ExecutorEncoder {
+            target: ExecutorTarget::Strip,
+        },
         SurfaceAction::ExecutorOff {
             target: ExecutorTarget::Strip,
         },
@@ -160,6 +163,7 @@ fn every_action() -> Vec<SurfaceAction> {
             SurfaceAction::Redo => 18,
             SurfaceAction::ConsoleWord { .. } => 19,
             SurfaceAction::ExecutorOn { .. } => 20,
+            SurfaceAction::ExecutorEncoder { .. } => 21,
         }
     };
     let mut seen: Vec<usize> = actions.iter().map(index).collect();
@@ -167,7 +171,7 @@ fn every_action() -> Vec<SurfaceAction> {
     seen.dedup();
     assert_eq!(
         seen,
-        (0..=20).collect::<Vec<_>>(),
+        (0..=21).collect::<Vec<_>>(),
         "every SurfaceAction variant has to be in the fixture"
     );
     actions
