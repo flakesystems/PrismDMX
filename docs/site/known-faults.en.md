@@ -170,6 +170,8 @@ appear that shifts parts of the UI.
 
 ## B68 — mac installer does not include the Open Fixture Library
 
+**Fixed for the next release.** The library was in the installer; the desk did not recognise a folder holding only it, on any platform.
+
 **Where:** mac installer, fixture library.
 **Severity:** annoying.
 

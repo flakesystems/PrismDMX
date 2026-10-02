@@ -211,7 +211,8 @@ pub fn ensure_fixtures_dir(data_dir: &Path) -> std::io::Result<bool> {
 /// # What makes a directory the library
 ///
 /// It holds something a fixture library holds: a `.gdtf` file, an unpacked
-/// GDTF's `description.xml`, or an Open Fixture Library `manufacturers.json`.
+/// GDTF's `description.xml`, or an Open Fixture Library `manufacturers.json` —
+/// at its top, or in a directory of its own (`ofl/`, B68).
 /// **Three tests rather than one since S61**, because the installed library is
 /// GDTF now and a GDTF library has no `manufacturers.json` in it — a desk whose
 /// library was installed before S61 still has one, and both are found.
@@ -242,6 +243,12 @@ pub fn installed_library_dir() -> Option<PathBuf> {
 /// One level down as well as at the top, because both layouts put the fixtures
 /// in a directory per manufacturer and `manufacturers.json` is the only thing
 /// either puts at the root.
+///
+/// **The Open Fixture Library counts one level down too** — B68. Since S61 the
+/// installer writes it to `ofl/`, and on a fresh install that is *all* there is:
+/// GDTF has no anonymous download. A search that wanted a `.gdtf` or a
+/// `description.xml` there found a library in no installation that had only
+/// the one the desk ships.
 fn holds_a_library(root: &Path) -> bool {
     if root.join("manufacturers.json").is_file() {
         return true;
@@ -252,7 +259,9 @@ fn holds_a_library(root: &Path) -> bool {
     entries.flatten().any(|entry| {
         let path = entry.path();
         if path.is_dir() {
-            return path.join("description.xml").is_file() || has_gdtf(&path);
+            return path.join("manufacturers.json").is_file()
+                || path.join("description.xml").is_file()
+                || has_gdtf(&path);
         }
         path.extension()
             .is_some_and(|extension| extension.eq_ignore_ascii_case("gdtf"))
@@ -276,8 +285,8 @@ fn has_gdtf(directory: &Path) -> bool {
 mod tests {
     use super::{
         DATA_DIR_VARIABLE, FIXTURES_README, NoDataDirectory, data_dir, default_show_path,
-        ensure_fixtures_dir, fixtures_dir, guard_path, lock_path, machine_config_path,
-        system_data_dir,
+        ensure_fixtures_dir, fixtures_dir, guard_path, holds_a_library, lock_path,
+        machine_config_path, system_data_dir,
     };
     use std::path::{Path, PathBuf};
 
@@ -410,5 +419,33 @@ mod tests {
         let blocked = dir.path().join("blocked");
         std::fs::write(&blocked, "").unwrap();
         assert!(ensure_fixtures_dir(&blocked).is_err());
+    }
+
+    /// **B68, GitHub #41.** The installer puts the Open Fixture Library in
+    /// `profiles/fixtures/ofl/` and nothing beside it — GDTF has no anonymous
+    /// download, so a fresh install has no `.gdtf` at all. A directory holding
+    /// only that was not taken for a library, the daemon started with its
+    /// generic profiles and said nothing, and the Patch window offered no
+    /// manufacturer: on a Mac, and on Windows alike, since the layout is the
+    /// same.
+    #[test]
+    fn a_library_that_is_only_the_open_fixture_library_one_level_down_is_a_library() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("profiles").join("fixtures");
+        std::fs::create_dir_all(root.join("ofl")).unwrap();
+        // The committed note is in there too, and is not a library.
+        std::fs::write(root.join("SOURCE.md"), "where this came from").unwrap();
+        assert!(!holds_a_library(&root), "an empty library is no library");
+
+        std::fs::write(root.join("ofl").join("manufacturers.json"), "{}").unwrap();
+        assert!(holds_a_library(&root));
+    }
+
+    /// The old layout, and a desk installed before S61 still has it.
+    #[test]
+    fn the_open_fixture_library_at_the_top_is_still_a_library() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("manufacturers.json"), "{}").unwrap();
+        assert!(holds_a_library(dir.path()));
     }
 }

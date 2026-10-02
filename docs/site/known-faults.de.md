@@ -177,6 +177,8 @@ UI springt.
 
 ## B68 — Der Mac-Installer enthält keine OFL-Bibliothek
 
+**Behoben für die nächste Version.** Die Bibliothek war im Installer; der Daemon erkannte einen Ordner, der nur sie enthält, auf keiner Plattform als Bibliothek.
+
 **Wo:** Mac-Installer, Fixture-Bibliothek.
 **Schwere:** ärgerlich.
 
