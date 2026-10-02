@@ -43,6 +43,8 @@ use super::LibraryEntry;
 use super::gdtf::{self, xml::Node};
 use super::zip::Archive;
 
+pub mod write;
+
 /// The root document every `.mvr` carries.
 const SCENE: &str = "GeneralSceneDescription.xml";
 
@@ -122,6 +124,12 @@ pub struct RigFixture {
     pub addresses: Vec<RigAddress>,
     /// Where it hangs, in this desk's axes and in metres, where the plan says.
     pub position: Option<Vec3>,
+    /// Which way it faces, as this desk's three angles in degrees
+    /// (`prism_domain::placement`), where the plan says — **B65**.
+    ///
+    /// Read with the export's own function, [`write::rotation_of_matrix`], so
+    /// the desk's rig comes back facing the way it left.
+    pub rotation: Option<Vec3>,
 }
 
 /// One DMX break's address, as MVR writes it.
@@ -258,6 +266,7 @@ fn read_scene(
             fixture_id: node.child_text("FixtureID").parse::<u32>().ok(),
             addresses: read_addresses(node),
             position: position_of(node.child_text("Matrix")),
+            rotation: write::rotation_of_matrix(node.child_text("Matrix")),
         });
     }
     Some(rig)
@@ -323,19 +332,7 @@ fn read_addresses(node: &Node) -> Vec<RigAddress> {
 /// ([`super::gdtf::geometry`], corrected in S30b). Both are Z-up where this
 /// desk is Y-up.
 fn position_of(text: &str) -> Option<Vec3> {
-    let mut groups = Vec::new();
-    for group in text.split('{').skip(1) {
-        let body = group.split_once('}')?.0;
-        let numbers: Vec<f64> = body
-            .split(',')
-            .filter_map(|part| part.trim().parse::<f64>().ok())
-            .filter(|value| value.is_finite())
-            .collect();
-        if numbers.len() < 3 {
-            return None;
-        }
-        groups.push(numbers);
-    }
+    let groups = write::groups_of(text)?;
     let translation = groups.get(3)?;
     Some(Vec3 {
         x: translation[0] * MATRIX_TO_METRES,

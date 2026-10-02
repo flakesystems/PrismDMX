@@ -83,6 +83,8 @@ describe("the operating system's file dialogue", () => {
       // S62: a venue's rig plan and one fixture profile, neither of which is
       // a show nor a machine path.
       "ImportRig",
+      // B65: where the show's rig is written as a plan.
+      "ExportRig",
       "ImportProfile",
     ];
     // A compile-time list asserted at run time: `prism_app::dialogs::PathKind`

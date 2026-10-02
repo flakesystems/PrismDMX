@@ -231,7 +231,8 @@ Zwei Regeln, die zu halten sind:
   `viewer/space.ts` baut dieselbe Matrix, und `space.test.ts` hält sie an die
   Matrizen, die `crates/prismd/tests/ui_viewer.rs` aus Rust aufgenommen hat. Was
   eine Matrix eines Planers in einen Ort übersetzt — der MVR-Import —, geht über
-  `rotation_of` und nicht über eine eigene Euler-Reihenfolge.
+  `rotation_of` und nicht über eine eigene Euler-Reihenfolge; der MVR-Export
+  schreibt dieselbe Konvention zurück (`mvr::write::matrix_of`).
 - **`PlaceFixtures` ist kein Patch.** Es schreibt `position` und `rotation` und
   sonst nichts, liefert kein `Effect::Repatch`, und sein Oops-Abbild ist nur der
   Ort. Eine Änderung, durch die Platzieren repatcht, legte einen Neubau des
@@ -530,6 +531,7 @@ andere. Seit S62 gibt es dafür vier Wege, jeder mit seinem eigenen Ort im Baum:
 | Datei in `fixtures/` legen | der Start-Lesevorgang | `prismd::daemon::load_library` |
 | *Import profile (GDTF)* | Datei kopieren, dann die **ganze Bibliothek neu lesen** | `Core::import_profile` |
 | *Import rig (MVR)* | Archiv lesen, einbetten, patchen, **einen** Oops-Schritt ablegen | `ShowFile::import_rig` |
+| *Export rig (MVR)* | Plan und je Fixture ein GDTF schreiben; **ändert nichts** | `ShowFile::export_rig`, `Core::export_rig` |
 | *Settings → GDTF Share* | anmelden, auflisten, laden, schreiben, berichten | `prismd::share::update` |
 
 Drei Dinge daran sind Entscheidungen und keine Zufälle.
@@ -560,6 +562,28 @@ vor jedem Applier), `machine.json` hält nie eines, und
 diesem Rechner behalten* sagen kann. `docs/FIXTURE_LIBRARY.md` trägt die
 Lizenzlage, an der das alles hängt; Entscheidung **D12** ist die Kurzfassung:
 dieses Pult verteilt kein GDTF weiter.
+
+**Ein Export schreibt, was die Show hält, und nimmt die Datei des Herstellers
+nur, wenn sie dazu passt.** B65. `library::mvr::write` schreibt den Plan; jedes
+Profil darin ist ein GDTF, und woher es kommt, ist die eine Entscheidung.
+`FixtureLibrary::published_archive` liefert das `.gdtf` der Bibliothek **nur,
+wenn es genau die Modi zurückliest, die die Show eingebettet hat** — eine Show,
+die gegen eine ältere Revision gepatcht wurde, bekäme sonst Adressen für den
+einen Footprint neben einer Datei mit einem anderen — und sonst schreibt
+`library::gdtf::write` eines aus dem Profil der Show. Das ist die Antwort des
+Eigentümers auf *was wird aus den Fixtures der Open Fixture Library*: keines hat
+ein GDTF, also wird jedes geschrieben, und `tests/rig_export.rs` schickt **alle
+2 871 Modi des installierten Korpus** durch Schreiben und Zurücklesen und
+verlangt denselben Footprint und dieselben Kanäle an denselben Stellen. Die
+Umkehrung ist ebenfalls eine Regel: ein Name, den das Format nicht nummeriert
+(`ColorAdd_R`), heißt für das zweite seiner Art `ColorAdd_R2`, und
+`attributes::of` liest ihn zurück — eine veröffentlichte Datei sagt das nie,
+also kann das Lesen keiner widersprechen. Die Matrix ist die der Spezifikation,
+`{u}{v}{w}{o}` mit den Spalten der Rotation als den drei Gruppen, in Millimetern
+und Z oben; `mvr::write::matrix_of` und `rotation_of_matrix` sind einander
+Umkehrung (eine Eigenschaft über beliebige Rotationen), und der Tausch der
+letzten beiden Achsen steht in **einer** Konstante (`SWAP`). Gegen die Spezifikation
+geprüft, nicht gegen eine Planerdatei; siehe `PROGRESS.md` §5.
 
 ### Und dann: ist ein neuer `AttributeType` wirklich die Antwort?
 

@@ -303,6 +303,11 @@ pub enum Effect {
     /// the bytes to [`crate::ShowFile::import_rig`] — which is where the one
     /// undoable step is built, out of what the file turned out to hold.
     ImportRig(std::path::PathBuf),
+    /// Write the show's rig as an `.mvr` — **B65**'s `ExportRig`.
+    ///
+    /// The daemon writes the file, for the reason it reads one: this crate does
+    /// no IO. What goes into it is [`crate::ShowFile::export_rig`].
+    ExportRig(std::path::PathBuf),
     /// Take one `.gdtf` into the library — **S62**'s `ImportProfile`.
     ImportProfile(std::path::PathBuf),
     /// One of **this machine's** settings changed — S37.
@@ -689,6 +694,9 @@ impl Show {
                 crate::file::export_path(path)?,
             ))),
             Command::ImportRig { path } => Ok(Applied::effect(Effect::ImportRig(
+                crate::file::rig_path(path)?,
+            ))),
+            Command::ExportRig { path } => Ok(Applied::effect(Effect::ExportRig(
                 crate::file::rig_path(path)?,
             ))),
             Command::ImportProfile { path } => Ok(Applied::effect(Effect::ImportProfile(

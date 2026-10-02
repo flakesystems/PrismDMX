@@ -375,8 +375,19 @@ fixture, with its number and address, **in one step that one Oops takes back**.
 Nothing already patched is touched — a planned fixture whose number your show is
 already using gets the next free one. The desk then says how many fixtures
 arrived and what it skipped. Each fixture **hangs where the plan puts it** — in
-*Viewer 3D* the rig is where your planner drew it. Which way each one *faces*
-is not taken from the plan yet: they all hang beam-down until you turn them.
+*Viewer 3D* the rig is where your planner drew it, **turned as they turned it**.
+
+**And back: *Export rig (MVR)*.** The key beside it writes your desk's rig as an
+`.mvr` your planner can open: every patched fixture with its number, name,
+address, place and turn, and the GDTF of every profile you use. It changes
+nothing in your show — it is a copy. **No fixture is lost**, an Open Fixture
+Library one included, although that library has no GDTF at all: where the
+library holds the manufacturer's file and it is exactly what your show
+embedded, **that file** goes in unchanged — models and gobo pictures too. For
+everything else the desk writes a GDTF from your show's profile (channels,
+ranges, home values, size and beams as far as the profile knows them). Your
+planner draws those more plainly, with no 3D model. The desk then says how many
+profiles were of which kind. A show with nothing patched writes no file.
 
 **3. Check that it arrives.** Open the *DMX Sheet*, pull the fixture to full,
 look. If nothing happens there, it is the outputs and not the patch.
@@ -928,7 +939,8 @@ Named here rather than discovered by you:
 
 - **The 3D viewer draws the rig, not the venue** — no truss, set or walls out
   of an MVR file, and no shadows. A fixture placed by an MVR import keeps the
-  plan's position but not its rotation yet.
+  plan's position and its turn; the turn is read as the MVR specification states
+  it and has not yet been checked against a real planner's file.
 - **No web remote** — a phone or tablet cannot run the desk yet. Planned.
 - **No timecode, no OSC, no PSN.** Planned.
 - **No effect engine** — the *Phaser Editor* window is empty because what goes

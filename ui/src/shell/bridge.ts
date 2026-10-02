@@ -46,6 +46,7 @@ export type PathKind =
   | "FixtureLibrary"
   | "SurfaceProfile"
   | "ImportRig"
+  | "ExportRig"
   | "ImportProfile";
 
 /** What the shell says this machine's start-up entry actually is. */

@@ -42,11 +42,110 @@ use prism_domain::AttributeType;
 #[must_use]
 pub fn of(name: &str) -> (AttributeType, u8) {
     let (family, number) = family_of(name);
-    let attribute = TABLE
-        .iter()
-        .find(|(key, _)| *key == family)
-        .map_or(AttributeType::Raw, |(_, attribute)| *attribute);
+    let found = |family: &str| {
+        TABLE
+            .iter()
+            .find(|(key, _)| *key == family)
+            .map(|(_, attribute)| *attribute)
+    };
+    // **A number on a name the format does not number** (B65): `ColorAdd_R2` is
+    // not GDTF's — a published file repeats a red by repeating its *geometry* —
+    // but it is what this desk writes for a second red (a pixel's, a second
+    // emitter bank), because the second of a kind has to be told from the first
+    // in a file that has no geometry to say so. Read as that name's family, with
+    // the number as the occurrence, exactly as `Gobo2` is.
+    let attribute = found(&family)
+        .or_else(|| {
+            family
+                .strip_suffix('n')
+                .filter(|stem| !stem.is_empty())
+                .and_then(found)
+        })
+        .unwrap_or(AttributeType::Raw);
     (attribute, number)
+}
+
+/// The GDTF name for an attribute of this desk — **B65**, the way back from
+/// [`of`], for the file an export writes.
+///
+/// The **standard** name where the format has one (`ColorAdd_R`, `Gobo2Pos`),
+/// numbered from the occurrence the way [`of`] reads it. A name the format does
+/// not number (`ColorAdd_R`) is numbered from the **second** on (`ColorAdd_R2`),
+/// which [`of`] reads back.
+///
+/// [`AttributeType::Raw`] is the one with no standard name: it *is* a name this
+/// desk had no word for, written as a raw knob that [`of`] reads back as one,
+/// and its own words are the `label`, which the file carries as the attribute's
+/// *Pretty*. `label` is read for that and nothing else.
+#[must_use]
+pub fn name_of(attribute: AttributeType, occurrence: u8, label: Option<&str>) -> String {
+    let number = u16::from(occurrence) + 1;
+    let numbered = |before: &str, after: &str| format!("{before}{number}{after}");
+    // A name the format does not number takes the number after it from the
+    // second on — see `of`. The first stays the standard name, unnumbered.
+    let fixed = |name: &str| {
+        Some(if occurrence == 0 {
+            name.to_owned()
+        } else {
+            format!("{name}{number}")
+        })
+    };
+    let standard = match attribute {
+        AttributeType::Dimmer => fixed("Dimmer"),
+        AttributeType::Pan => fixed("Pan"),
+        AttributeType::Tilt => fixed("Tilt"),
+        AttributeType::Red => fixed("ColorAdd_R"),
+        AttributeType::Green => fixed("ColorAdd_G"),
+        AttributeType::Blue => fixed("ColorAdd_B"),
+        AttributeType::White => fixed("ColorAdd_W"),
+        // Red-yellow, green-yellow and blue-magenta are the format's names for
+        // what a manufacturer sells as amber, lime and indigo; see `TABLE`.
+        AttributeType::Amber => fixed("ColorAdd_RY"),
+        AttributeType::Lime => fixed("ColorAdd_GY"),
+        AttributeType::Indigo => fixed("ColorAdd_BM"),
+        AttributeType::Cyan => fixed("ColorAdd_C"),
+        AttributeType::Magenta => fixed("ColorAdd_M"),
+        AttributeType::Yellow => fixed("ColorAdd_Y"),
+        AttributeType::Uv => fixed("ColorAdd_UV"),
+        AttributeType::WarmWhite => fixed("ColorAdd_WW"),
+        AttributeType::ColdWhite => fixed("ColorAdd_CW"),
+        AttributeType::ColorTemperature => fixed("CTO"),
+        AttributeType::PositionSpeed => fixed("PositionMSpeed"),
+        AttributeType::BeamPosition => fixed("XYZ_X"),
+        AttributeType::Iris => fixed("Iris"),
+        AttributeType::Zoom => fixed("Zoom"),
+        AttributeType::BladeSystem => fixed("ShaperMacros"),
+        AttributeType::Sound => fixed("AudioVolume"),
+        AttributeType::ColorWheel => Some(numbered("Color", "")),
+        AttributeType::ColorWheelRotation => Some(numbered("Color", "WheelSpin")),
+        AttributeType::Gobo => Some(numbered("Gobo", "")),
+        AttributeType::GoboRotation => Some(numbered("Gobo", "Pos")),
+        AttributeType::Prism => Some(numbered("Prism", "")),
+        AttributeType::PrismRotation => Some(numbered("Prism", "Pos")),
+        AttributeType::Effect => Some(numbered("Effects", "")),
+        AttributeType::EffectSpeed => Some(numbered("Effects", "Rate")),
+        AttributeType::Frost => Some(numbered("Frost", "")),
+        AttributeType::Blade => Some(numbered("Blade", "A")),
+        AttributeType::BladeRotation => Some(numbered("Blade", "Rot")),
+        AttributeType::Fog => Some(numbered("Fog", "")),
+        AttributeType::Haze => Some(numbered("Haze", "")),
+        AttributeType::Speed => Some(numbered("Speed", "")),
+        AttributeType::Control => Some(numbered("Control", "")),
+        AttributeType::Focus => Some(numbered("Focus", "")),
+        AttributeType::Shutter => Some(numbered("Shutter", "Strobe")),
+        AttributeType::Raw => None,
+    };
+    standard.unwrap_or_else(|| {
+        // Letters only, behind a word no table row starts with, so [`of`] reads
+        // it as a raw knob whatever the label says — and the number last, which
+        // is where [`family_of`] looks for the occurrence.
+        let words: String = label
+            .unwrap_or("")
+            .chars()
+            .filter(char::is_ascii_alphabetic)
+            .collect();
+        format!("Raw{words}{number}")
+    })
 }
 
 /// The name GDTF's own table gives the parameter, spaced for a person.
@@ -319,7 +418,7 @@ const TABLE: &[(&str, AttributeType)] = &[
 mod tests {
     use prism_domain::AttributeType;
 
-    use super::{family_of, home, of, pretty};
+    use super::{family_of, home, name_of, of, pretty};
 
     #[test]
     fn a_plain_name_is_its_attribute() {
@@ -389,5 +488,22 @@ mod tests {
         assert_eq!(home(AttributeType::Dimmer), 0);
         assert_eq!(home(AttributeType::Pan), 32_768);
         assert_eq!(home(AttributeType::Tilt), 32_768);
+    }
+
+    /// B65: the name an export writes is the name the reader reads back, for
+    /// every attribute this desk has and the first few of each kind.
+    #[test]
+    fn a_written_name_reads_back_as_the_attribute_it_was() {
+        for attribute in AttributeType::ALL {
+            for occurrence in 0..4_u8 {
+                let name = name_of(attribute, occurrence, Some("A Manufacturer's Word 7"));
+                let (read, number) = of(&name);
+                assert_eq!(
+                    (read, number),
+                    (attribute, occurrence),
+                    "{attribute:?} {occurrence}: {name}"
+                );
+            }
+        }
     }
 }

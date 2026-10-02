@@ -268,6 +268,7 @@ type Command =
   | { t: "ImportShow"; path: string }
   // ---- The fixture library (S62) — a venue's own plan, and its own account ----
   | { t: "ImportRig"; path: string }        // an .mvr: the profiles and the patch
+  | { t: "ExportRig"; path: string }        // the rig as an .mvr (B65); changes nothing
   | { t: "ImportProfile"; path: string }    // one .gdtf into the fixture folder
   | { t: "UpdateLibrary"; user: string; password: string; remember: boolean }
   | { t: "ForgetLibraryAccount" }
@@ -483,6 +484,7 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 >
 > ```typescript
 > | { t: "ImportRig"; path: string }
+> | { t: "ExportRig"; path: string }
 > | { t: "ImportProfile"; path: string }
 > | { t: "UpdateLibrary"; user: string; password: string; remember: boolean }
 > | { t: "ForgetLibraryAccount" }
@@ -494,6 +496,15 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > `ShowFile::import_rig` files its own `UndoRecord` and `image()` refuses the
 > variant. One `.mvr` is **one** step — a plan of ninety fixtures taken back by
 > one press of Oops, because half a rig is not a state anybody asked for.
+>
+> **`ExportRig` (B65) changes nothing at all** — not the show, not the journal,
+> not the Save lamp — and answers with one `Notice`: how many fixtures and
+> profiles were written, and how many of the profiles are the manufacturer's own
+> GDTF as published and how many this desk wrote (every Open Fixture Library
+> profile is of the second kind). The daemon writes the file, to a name beside
+> it first and moved into place, so a plan that is short is never left behind. A
+> show with nothing patched answers a `Warn` notice and writes nothing; a path
+> that is not an `.mvr` is refused like an import's.
 >
 > **`ImportProfile` changes no show at all.** It copies one `.gdtf` into the
 > desk's fixture folder and re-reads the library by the same call start-up

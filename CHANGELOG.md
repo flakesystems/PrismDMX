@@ -22,6 +22,18 @@ Alle Versionen bisher sind **Vorabversionen**.
 
 ## Noch nicht veröffentlicht
 
+- **Rig exportieren:** ***Export rig (MVR)*** im Patch-Fenster schreibt das Rig
+  des Pults als `.mvr` — jedes Fixture mit Nummer, Namen, Adresse, Ort und
+  Drehung, dazu das GDTF jedes verwendeten Profils (B65). Wo die Bibliothek die
+  Datei des Herstellers hat und sie genau dem entspricht, was die Show
+  eingebettet hat, kommt **diese Datei** unverändert hinein; **für alles
+  andere — auch für jedes Fixture aus der Open Fixture Library, das kein GDTF
+  hat — schreibt das Pult eines**, mit seinen Kanälen, Bereichen und
+  Ruhewerten. Kein Fixture geht verloren; ein Planer zeichnet die geschriebenen
+  einfacher (ohne 3D-Modell und Gobo-Bilder). Das Pult sagt, wie viele von
+  welcher Art es waren.
+- **Rig importieren:** eine `.mvr` hängt ihre Fixtures jetzt auch **so, wie der
+  Planer sie gedreht hat** — bisher nur an den Ort.
 - **Encoder:** die Encoder der Executor-Streifen am X-Touch **tun jetzt etwas**.
   Bisher ließ sich ihre Funktion einstellen, aber nichts las sie — auch dort
   nicht, wo der Eigentümer sie am 2026-09-20 im Crossfade-Betrieb vermisst hat;

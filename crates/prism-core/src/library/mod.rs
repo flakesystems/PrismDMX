@@ -1424,6 +1424,46 @@ impl FixtureLibrary {
         self.index.0.take()
     }
 
+    /// The manufacturer's own `.gdtf` for these modes of one fixture — **B65**,
+    /// what the MVR export copies instead of writing a file of its own.
+    ///
+    /// The file the library read the first mode from, **provided it holds every
+    /// one of `modes` exactly as the show embedded it**: a show patched against
+    /// an older revision of a fixture, or a venue's own copy that has since
+    /// changed a footprint, is not exported with a file that no longer agrees
+    /// with the addresses written beside it. Those are written from the show's
+    /// own profile instead, which is what the show actually patched.
+    ///
+    /// `None` for a profile that came from the Open Fixture Library (it has no
+    /// GDTF anywhere), for an unpacked GDTF directory, and when the file is gone.
+    /// A rig plan the profile came out of is searched for the member that holds
+    /// it, because that is where an imported rig's profiles live.
+    #[must_use]
+    pub fn published_archive(&self, modes: &[&FixtureType]) -> Option<Vec<u8>> {
+        let first = modes.first()?;
+        let holds = |bytes: &[u8]| -> bool {
+            let (built, _) = gdtf::read_archive(bytes, false);
+            modes
+                .iter()
+                .all(|mode| built.iter().any(|(_, profile)| profile == *mode))
+        };
+        match self.sources.get(&first.id)? {
+            Source::Archive(path) => {
+                let bytes = std::fs::read(path).ok()?;
+                holds(&bytes).then_some(bytes)
+            }
+            Source::Plan(path) => {
+                let bytes = std::fs::read(path).ok()?;
+                let plan = zip::Archive::read(&bytes)?;
+                plan.names()
+                    .filter(|member| member.to_ascii_lowercase().ends_with(".gdtf"))
+                    .filter_map(|member| plan.file(member))
+                    .find(|inner| holds(inner))
+            }
+            Source::Unpacked(_) => None,
+        }
+    }
+
     /// One profile by key, ready to embed into a show.
     ///
     /// A GDTF profile is read back out of its file (`Held`) — a few

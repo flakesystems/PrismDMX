@@ -145,6 +145,7 @@ ist ein Abschnitt in den Einstellungen, keine Tür.
 | **OFL im Installer** | nein | nein | **da** — `release.yml` + `fetch-ofl` |
 | **Eigene Datei im Datenverzeichnis** | nein | nein | **da** — `.gdtf` oder `.json` in `fixtures\`, gewinnt gegen die installierte (B43); oder der Knopf *Import profile (GDTF)*, der die Datei genau dorthin kopiert |
 | **MVR-Import** | nein | nein | **da** — Knopf *Import rig (MVR)* im Patch-Fenster, und eine `.mvr` im eigenen Ordner füllt auch ohne ihn die Bibliothek |
+| **MVR-Export** | nein | nein | **da** (B65) — Knopf *Export rig (MVR)* daneben, der Rückweg zum Planer; siehe unten |
 | **In-App-Login zu GDTF Share** | ja | ja | **da** — *Settings → This machine → GDTF Share*; ungetestet gegen den echten Dienst, siehe §3 |
 
 Dazu der Pfad in *Settings → This machine → Fixture library*, mit dem ein
@@ -186,6 +187,42 @@ Drei Regeln, die dabei entschieden wurden:
 - **Was passiert ist, wird gesagt.** Der Daemon schickt eine Notice, die auch
   nennt, was *nicht* ging — ein Import, der elf von zwanzig Fixtures gepatcht
   hat, muss das sagen.
+
+### Der Rückweg: *Export rig (MVR)* — B65
+
+`Command::ExportRig` schreibt das Rig der Show als `.mvr`: jedes gepatchte
+Fixture mit Nummer, Namen, Adresse, Ort und Drehung, dazu **ein GDTF je
+Fixture-Typ** mit allen Modi, die die Show davon benutzt. Er ändert nichts an
+der Show.
+
+**Was aus den Fixtures der Open Fixture Library wird** — die Frage des
+Eigentümers, bevor es gebaut wurde: sie **gehen nicht verloren**. Ein
+OFL-Profil hat keine GDTF-Datei, also schreibt das Pult eine
+(`library::gdtf::write`) aus dem Profil, das die Show eingebettet hat: Kanäle an
+ihren Stellen (16 Bit als zwei Offsets), Ruhewerte, physikalische Bereiche, die
+Bereichsnamen als `ChannelSet`s, ein Körper mit den Strahlen des Profils (oder
+der Kiste samt einem Strahl, die der Viewer für ein Profil ohne Gerät zeichnet).
+Was ein `FixtureType` nicht trägt, schreibt es nicht: keine 3D-Modelle, keine
+Gobo-Bilder. Ein Planer zeichnet solche Fixtures also schlichter.
+
+**Wo die Bibliothek das GDTF des Herstellers hat, kommt dieses hinein — Byte für
+Byte**, aber nur, wenn es genau die Modi zurückliest, die die Show eingebettet
+hat (`FixtureLibrary::published_archive`): ein Profil einer älteren Revision
+würde sonst mit Adressen exportiert, die für einen anderen Footprint gelegt
+wurden. Auch eine `.mvr`, aus der ein Profil kam, wird danach durchsucht.
+
+Die Matrix steht, wie die Spezifikation sie nennt: `{u}{v}{w}{o}` — die drei
+Achsen, **auf die die eigenen Achsen des Fixtures gedreht werden** (die Spalten
+der Drehung), dann der Ort in Millimetern, Z oben, rechtshändig. Dieses Pult ist
+Y oben und linkshändig; die beiden treffen sich in einem Tausch der letzten zwei
+Achsen (`library::mvr::write`), in beiden Richtungen. Der Import liest die
+Drehung seit B65 mit derselben Funktion, womit die offene Frage aus S62 (*sind
+`{u}{v}{w}` die gedrehten Achsen oder ihre Transponierte?*) **nach der
+Spezifikation** beantwortet ist. **An einer echten Planerdatei gegengeprüft ist
+sie nicht** — das steht in `PROGRESS.md` §5.
+
+Das Pult sagt nach dem Export, wie viele Profile **als veröffentlicht** und wie
+viele **vom Pult geschrieben** hineingingen.
 
 ---
 

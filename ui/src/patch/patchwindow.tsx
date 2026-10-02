@@ -246,6 +246,23 @@ export function PatchWindow({ show }: { readonly show: JsonValue }) {
     }, [send]);
 
     /**
+     * Writes the show's rig as an `.mvr` — **B65**.
+     *
+     * The mirror of {@link importRig}: the dialogue is the operating system's
+     * and the **daemon** writes the archive, because what a rig is, which
+     * profile each fixture uses and where the profiles' GDTF come from are all
+     * its knowledge and none of the browser's. It changes nothing in the show,
+     * so there is nothing to undo — the daemon says what it wrote in a notice.
+     */
+    const exportRig = useCallback(() => {
+        void choosePath("ExportRig").then((path) => {
+            if (path !== null) {
+                send({ t: "ExportRig", path });
+            }
+        });
+    }, [send]);
+
+    /**
      * Takes one `.gdtf` into the library — **S62**.
      *
      * The sibling of {@link importRig} and deliberately a separate key: a
@@ -304,6 +321,7 @@ export function PatchWindow({ show }: { readonly show: JsonValue }) {
                 profiles={profiles}
                 onAdd={add}
                 onImportRig={importRig}
+                onExportRig={exportRig}
                 onImportProfile={importProfile}
             />
             <PatchTable rows={rows} conflicted={conflicted} editing={draft?.wasId ?? null} onEdit={edit} />
@@ -330,12 +348,14 @@ function PatchToolbar({
     profiles,
     onAdd,
     onImportRig,
+    onExportRig,
     onImportProfile,
 }: {
     readonly rows: readonly PatchRow[];
     readonly profiles: readonly ProfileRow[];
     readonly onAdd: () => void;
     readonly onImportRig: () => void;
+    readonly onExportRig: () => void;
     readonly onImportProfile: () => void;
 }) {
     return (
@@ -357,6 +377,21 @@ function PatchToolbar({
                 <>
                     <button type="button" data-testid="patch-import-rig" onClick={onImportRig}>
                         Import rig (MVR)
+                    </button>
+                    {/*
+                      **B65.** The way back to the planner: every fixture with
+                      its address, place and facing, and a GDTF for every
+                      profile — the Open Fixture Library's included, which the
+                      daemon writes where there is no file of the maker's.
+                      Nothing is patched or changed, so it is only ever a copy.
+                    */}
+                    <button
+                        type="button"
+                        data-testid="patch-export-rig"
+                        disabled={rows.length === 0}
+                        onClick={onExportRig}
+                    >
+                        Export rig (MVR)
                     </button>
                     {/*
                       One profile rather than a whole plan — the file from a

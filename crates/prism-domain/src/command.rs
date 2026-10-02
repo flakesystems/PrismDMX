@@ -1298,6 +1298,23 @@ pub enum Command {
         /// The `.mvr` to read.
         path: String,
     },
+    /// Write the show's rig out as an `.mvr` — **B65**, the way back to the
+    /// planner that [`Self::ImportRig`] is the way in from.
+    ///
+    /// Every patched fixture goes into the plan with its number, its name, its
+    /// address, where it hangs and which way it faces, and **the GDTF of every
+    /// profile in use**: the manufacturer's own file where the library holds
+    /// one that is exactly what the show embedded, and a GDTF this desk writes
+    /// from the show's own profile for the rest — which is where the Open
+    /// Fixture Library's fixtures go, so none of them is lost on the way out.
+    ///
+    /// Changes nothing, the open show included, so there is nothing to undo and
+    /// no Save lamp: an export is a copy for somebody else's program. A show
+    /// with nothing patched writes no file and says so.
+    ExportRig {
+        /// Where to write the `.mvr`.
+        path: String,
+    },
     /// Take one fixture profile into this desk's library — **S62**.
     ///
     /// A `.gdtf` from a manufacturer's website or a stick. The file is **copied
@@ -1901,6 +1918,7 @@ impl Command {
                 | Self::ExportShow { .. }
                 | Self::ImportShow { .. }
                 | Self::ImportRig { .. }
+                | Self::ExportRig { .. }
                 | Self::ImportProfile { .. }
                 | Self::UpdateLibrary { .. }
                 | Self::ForgetLibraryAccount

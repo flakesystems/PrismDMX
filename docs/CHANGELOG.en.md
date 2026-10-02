@@ -24,6 +24,17 @@ Every version so far is a **pre-release**.
 
 ## Not yet released
 
+- **Export the rig:** ***Export rig (MVR)*** in the Patch window writes the
+  desk's rig as an `.mvr` — every fixture with its number, name, address, place
+  and turn, and the GDTF of every profile in use (B65). Where the library holds
+  the manufacturer's file and it is exactly what the show embedded, **that file**
+  goes in unchanged; **for everything else — every Open Fixture Library fixture,
+  which has no GDTF — the desk writes one**, with its channels, ranges and home
+  values. No fixture is lost; a planner draws the written ones more plainly
+  (no 3D model, no gobo pictures). The desk says how many of each kind there
+  were.
+- **Import a rig:** an `.mvr` now hangs its fixtures **facing the way the
+  planner turned them**, not only at their place.
 - **Encoders:** the encoders of the executor strips on the X-Touch **now do
   something**. Until now their function could be set and nothing read it —
   including in the crossfade case the owner missed them in on 2026-09-20; they

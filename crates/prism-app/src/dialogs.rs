@@ -58,13 +58,15 @@ pub enum PathKind {
     SurfaceProfile,
     /// A venue's rig plan to take into the show — **S62**.
     ImportRig,
+    /// Where to write the show's rig as a plan — **B65**.
+    ExportRig,
     /// One fixture profile to take into the library — **S62**.
     ImportProfile,
 }
 
 impl PathKind {
     /// Every kind, so a test can walk them and the caller can list them.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::OpenShow,
         Self::SaveShowAs,
         Self::NewShow,
@@ -72,6 +74,7 @@ impl PathKind {
         Self::ImportShow,
         Self::FixtureLibrary,
         Self::ImportRig,
+        Self::ExportRig,
         Self::ImportProfile,
         Self::SurfaceProfile,
     ];
@@ -203,6 +206,23 @@ pub const fn chooser(kind: PathKind) -> Chooser {
             ],
             suggested: None,
         },
+        // A **save** dialogue, so the file name is the operator's and an
+        // existing plan is asked about by the system before it is replaced.
+        PathKind::ExportRig => Chooser {
+            title: "Export the rig as a plan (MVR)",
+            mode: Mode::SaveFile,
+            filters: &[
+                Filter {
+                    name: "Rig plan",
+                    extensions: &["mvr"],
+                },
+                Filter {
+                    name: "Every file",
+                    extensions: &["*"],
+                },
+            ],
+            suggested: Some("rig.mvr"),
+        },
         PathKind::ImportProfile => Chooser {
             title: "Import a fixture profile (GDTF)",
             mode: Mode::OpenFile,
@@ -327,6 +347,7 @@ mod tests {
                 "\"ImportShow\"",
                 "\"FixtureLibrary\"",
                 "\"ImportRig\"",
+                "\"ExportRig\"",
                 "\"ImportProfile\"",
                 "\"SurfaceProfile\"",
             ]

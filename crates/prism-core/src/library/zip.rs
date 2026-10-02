@@ -485,13 +485,135 @@ fn u64_at(bytes: &[u8], at: usize) -> Option<u64> {
     Some(u64::from_le_bytes(eight))
 }
 
-/// Building an archive, for the tests of this module and of the GDTF reader
-/// above it.
+/// Writing an archive — **B65**, the MVR export.
+///
+/// The reader above is this module's reason to exist; this is its mirror, and
+/// it is as small as the reader is: stored and deflated entries, a central
+/// directory, no encryption, no ZIP64. A rig of ten thousand fixtures is a few
+/// megabytes, so the 4 GiB and 65 535-entry limits of the plain format are
+/// never what stops an export — and where one would be, [`Writer::finish`]
+/// answers `None` rather than a file the reader above would refuse.
+///
+/// **Tested against bytes and against the reader**, never against itself: the
+/// round trip in this module's tests goes through [`Archive`], and the
+/// `testkit` builder below is a second, independent writer whose output the
+/// reader had already been held to.
+#[derive(Debug, Default)]
+pub struct Writer {
+    files: Vec<(String, Vec<u8>, bool)>,
+}
+
+impl Writer {
+    /// An empty archive.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { files: Vec::new() }
+    }
+
+    /// Adds one file, **stored** — for what is already compressed, which a
+    /// `.gdtf` inside an `.mvr` is.
+    pub fn add_stored(&mut self, name: &str, body: &[u8]) {
+        self.files.push((name.to_owned(), body.to_vec(), false));
+    }
+
+    /// Adds one file, **deflated** — for text.
+    pub fn add_deflated(&mut self, name: &str, body: &[u8]) {
+        self.files.push((name.to_owned(), body.to_vec(), true));
+    }
+
+    /// The archive, or `None` where it would not fit the plain format.
+    #[must_use]
+    pub fn finish(self) -> Option<Vec<u8>> {
+        use std::io::Write as _;
+
+        let count = u16::try_from(self.files.len()).ok()?;
+        let mut out: Vec<u8> = Vec::new();
+        let mut central: Vec<u8> = Vec::new();
+        for (name, body, deflate) in &self.files {
+            let mut crc = flate2::Crc::new();
+            crc.update(body);
+            let crc = crc.sum();
+            let payload = if *deflate {
+                let mut encoder =
+                    flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
+                encoder.write_all(body).ok()?;
+                encoder.finish().ok()?
+            } else {
+                body.clone()
+            };
+            let method: u16 = if *deflate {
+                Entry::DEFLATE
+            } else {
+                Entry::STORED
+            };
+            let offset = u32::try_from(out.len()).ok()?;
+            let compressed = u32::try_from(payload.len()).ok()?;
+            let size = u32::try_from(body.len()).ok()?;
+            let name_length = u16::try_from(name.len()).ok()?;
+            // Bit 11: the name is UTF-8, which a fixture's name may well be.
+            let flags: u16 = if name.is_ascii() { 0 } else { 0x0800 };
+
+            out.extend_from_slice(&LOCAL.to_le_bytes());
+            out.extend_from_slice(&20_u16.to_le_bytes()); // version needed
+            out.extend_from_slice(&flags.to_le_bytes());
+            out.extend_from_slice(&method.to_le_bytes());
+            out.extend_from_slice(&0_u16.to_le_bytes()); // time
+            out.extend_from_slice(&DOS_EPOCH.to_le_bytes());
+            out.extend_from_slice(&crc.to_le_bytes());
+            out.extend_from_slice(&compressed.to_le_bytes());
+            out.extend_from_slice(&size.to_le_bytes());
+            out.extend_from_slice(&name_length.to_le_bytes());
+            out.extend_from_slice(&0_u16.to_le_bytes()); // extra
+            out.extend_from_slice(name.as_bytes());
+            out.extend_from_slice(&payload);
+
+            central.extend_from_slice(&CENTRAL.to_le_bytes());
+            central.extend_from_slice(&20_u16.to_le_bytes()); // made by
+            central.extend_from_slice(&20_u16.to_le_bytes()); // needed
+            central.extend_from_slice(&flags.to_le_bytes());
+            central.extend_from_slice(&method.to_le_bytes());
+            central.extend_from_slice(&0_u16.to_le_bytes()); // time
+            central.extend_from_slice(&DOS_EPOCH.to_le_bytes());
+            central.extend_from_slice(&crc.to_le_bytes());
+            central.extend_from_slice(&compressed.to_le_bytes());
+            central.extend_from_slice(&size.to_le_bytes());
+            central.extend_from_slice(&name_length.to_le_bytes());
+            central.extend_from_slice(&0_u16.to_le_bytes()); // extra
+            central.extend_from_slice(&0_u16.to_le_bytes()); // comment
+            central.extend_from_slice(&0_u16.to_le_bytes()); // disk
+            central.extend_from_slice(&0_u16.to_le_bytes()); // internal
+            central.extend_from_slice(&0_u32.to_le_bytes()); // external
+            central.extend_from_slice(&offset.to_le_bytes());
+            central.extend_from_slice(name.as_bytes());
+        }
+        let start = u32::try_from(out.len()).ok()?;
+        let size = u32::try_from(central.len()).ok()?;
+        out.extend_from_slice(&central);
+        out.extend_from_slice(&EOCD.to_le_bytes());
+        out.extend_from_slice(&0_u16.to_le_bytes()); // this disk
+        out.extend_from_slice(&0_u16.to_le_bytes()); // directory's disk
+        out.extend_from_slice(&count.to_le_bytes());
+        out.extend_from_slice(&count.to_le_bytes());
+        out.extend_from_slice(&size.to_le_bytes());
+        out.extend_from_slice(&start.to_le_bytes());
+        out.extend_from_slice(&0_u16.to_le_bytes()); // comment
+        // Past 4 GiB the offsets above would have wrapped; they did not, or
+        // `try_from` would have said so.
+        Some(out)
+    }
+}
+
+/// 1980-01-01, the earliest date a ZIP can state and the one a reproducible
+/// archive wants: the same rig exported twice is the same bytes.
+const DOS_EPOCH: u16 = 0x0021;
+
+/// Building an archive **by hand**, for the tests of this module and of the GDTF
+/// reader above it.
 ///
 /// In this crate rather than in a `tests/` directory because both callers are
-/// unit tests, and public to the crate rather than to the world because a ZIP
-/// **writer** is not something this desk ships: nothing in production writes
-/// one.
+/// unit tests. It stays beside [`Writer`] on purpose: it is the independent
+/// second writer, with a local extra field and a deflate switch, that the
+/// reader's tests were written against before the production writer existed.
 #[cfg(test)]
 pub(crate) mod testkit {
     /// Builds an archive **byte by byte**, which is the whole point of this
@@ -604,7 +726,56 @@ pub(crate) mod testkit {
 #[cfg(test)]
 mod tests {
     use super::testkit::Builder;
-    use super::{Archive, MAX_FILE};
+    use super::{Archive, MAX_FILE, Writer};
+
+    /// B65: what the production writer writes is read back by the reader, byte
+    /// for byte, stored and deflated, with a name that is not ASCII.
+    #[test]
+    fn what_the_writer_writes_the_reader_reads() {
+        let text = "<a>Fixture ä ö ü</a>".repeat(200);
+        let mut writer = Writer::new();
+        writer.add_deflated("GeneralSceneDescription.xml", text.as_bytes());
+        writer.add_stored("Robe@T1 Profile.gdtf", &[0, 1, 2, 3, 255]);
+        writer.add_stored("Ünïcode.gdtf", b"x");
+        let bytes = writer.finish().expect("a small archive");
+
+        let archive = Archive::read(&bytes).expect("the reader accepts it");
+        assert_eq!(archive.len(), 3);
+        assert_eq!(
+            archive.file("GeneralSceneDescription.xml").as_deref(),
+            Some(text.as_bytes())
+        );
+        assert_eq!(
+            archive.file("Robe@T1 Profile.gdtf").as_deref(),
+            Some(&[0, 1, 2, 3, 255][..])
+        );
+        assert_eq!(archive.file("Ünïcode.gdtf").as_deref(), Some(&b"x"[..]));
+        assert!(
+            bytes.len() < text.len(),
+            "text is deflated, so the archive is smaller than its text"
+        );
+    }
+
+    /// The same rig exported twice is the same file, which is what lets a
+    /// planner tell *changed* from *exported again*.
+    #[test]
+    fn the_writer_is_reproducible() {
+        let build = || {
+            let mut writer = Writer::new();
+            writer.add_deflated("a.xml", b"<a/>");
+            writer.finish().unwrap()
+        };
+        assert_eq!(build(), build());
+    }
+
+    /// A name too long for the format is refused, not written as a file the
+    /// reader would then reject.
+    #[test]
+    fn a_name_that_cannot_be_written_is_none() {
+        let mut writer = Writer::new();
+        writer.add_stored(&"n".repeat(70_000), b"x");
+        assert!(writer.finish().is_none());
+    }
 
     #[test]
     fn a_stored_entry_reads_back_exactly() {

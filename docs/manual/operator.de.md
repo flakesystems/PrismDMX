@@ -387,9 +387,21 @@ jedes geplante Fixture, mit Nummer und Adresse, **in einem Schritt, den ein Oops
 ganz zurücknimmt**. Was schon gepatcht ist, bleibt unberührt — ein geplantes
 Fixture, dessen Nummer Ihre Show schon benutzt, bekommt die nächste freie. Das
 Pult sagt danach, wie viele Fixtures ankamen und was es übersprungen hat. Jedes
-Fixture **hängt dort, wo die Planung es hat** — im *Viewer 3D* steht das Rig so,
-wie Ihr Planer es gezeichnet hat. Wohin jedes *zeigt*, wird noch nicht aus der
-Planung übernommen: alle hängen mit dem Strahl nach unten, bis Sie sie drehen.
+Fixture **hängt dort und so gedreht, wie die Planung es hat** — im *Viewer 3D*
+steht das Rig so, wie Ihr Planer es gezeichnet hat.
+
+**Und zurück: *Export rig (MVR)*.** Der Knopf daneben schreibt das Rig Ihres
+Pults als `.mvr`, die Ihr Planer öffnen kann: jedes gepatchte Fixture mit Nummer,
+Namen, Adresse, Ort und Drehung, dazu das GDTF jedes Profils, das Sie benutzen.
+Er ändert an Ihrer Show nichts — es ist eine Kopie. **Kein Fixture geht
+verloren**, auch keines aus der Open Fixture Library, obwohl es dort gar kein
+GDTF gibt: Wo die Bibliothek die Datei des Herstellers hat und sie genau dem
+entspricht, was Ihre Show eingebettet hat, kommt **diese Datei** unverändert
+hinein — mit Modellen und Gobo-Bildern. Für alles andere schreibt das Pult ein
+GDTF aus dem Profil Ihrer Show (Kanäle, Bereiche, Ruhewerte, Größe und Strahlen,
+soweit das Profil sie kennt). Ihr Planer zeichnet diese schlichter, ohne
+3D-Modell. Das Pult sagt danach, wie viele Profile von welcher Art es waren.
+Eine Show ohne gepatchte Fixtures schreibt keine Datei.
 
 **3. Nachsehen, ob es ankommt.** *DMX Sheet* öffnen, das Fixture auf voll
 ziehen, hinsehen. Wenn dort nichts passiert, liegt es an den Ausgängen und nicht
@@ -967,8 +979,9 @@ Hier genannt, statt von Ihnen entdeckt zu werden:
 
 - **Der 3D-Viewer zeichnet das Rig, nicht den Saal** — keine Traversen,
   Kulissen oder Wände aus einer MVR-Datei und keine Schatten. Ein Fixture, das
-  ein MVR-Import platziert hat, behält den Ort aus der Planung, ihre Rotation
-  aber noch nicht.
+  ein MVR-Import platziert hat, behält Ort und Drehung aus der Planung. Die
+  Drehung ist nach der MVR-Spezifikation gelesen und noch an keiner echten
+  Planerdatei gegengeprüft.
 - **Keine Web-Fernbedienung** — ein Telefon oder Tablet kann das Pult noch nicht
   fahren. Geplant.
 - **Kein Timecode, kein OSC, kein PSN.** Geplant.

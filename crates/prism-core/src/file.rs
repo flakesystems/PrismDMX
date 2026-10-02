@@ -1512,6 +1512,7 @@ impl ShowFile {
             // command whose content is in a file cannot be imaged from the
             // command.
             | Command::ImportRig { .. }
+            | Command::ExportRig { .. }
             | Command::ImportProfile { .. }
             | Command::UpdateLibrary { .. }
             | Command::ForgetLibraryAccount
@@ -1766,11 +1767,12 @@ impl ShowFile {
                 let place = prism_domain::FixturePlace {
                     id,
                     position,
-                    // The plan's rotation is not read yet: MVR states it as a
-                    // matrix, and turning that into `prism_domain::placement`'s
-                    // triple is `rotation_of`'s job once a published file has
-                    // shown which way round its rows are (PROGRESS.md §5).
-                    rotation: prism_domain::Vec3::ZERO,
+                    // **B65 settled what S62 left open**: the MVR specification
+                    // states the matrix as the three axes the fixture is turned
+                    // to, so the rotation is read the way the export writes it
+                    // (`mvr::write::matrix_of`), and a plan that states none
+                    // hangs the fixture as its profile describes it.
+                    rotation: fixture.rotation.unwrap_or(prism_domain::Vec3::ZERO),
                 };
                 if place.is_reachable() {
                     places.push(place);
@@ -1863,6 +1865,24 @@ impl ShowFile {
             },
             report,
         ))
+    }
+
+    /// The show's rig as an `.mvr` — **B65**: every patched fixture with its
+    /// address, its place and its facing, and the GDTF of every profile in use.
+    ///
+    /// The manufacturer's own file where the library holds one that is exactly
+    /// what the show embedded, a GDTF written from the show's profile for the
+    /// rest — the Open Fixture Library's included, so none of them is lost. See
+    /// [`crate::library::mvr::write`].
+    ///
+    /// Changes nothing, and `None` for a show with no fixture patched: an
+    /// archive with an empty plan is not a rig, and an operator who pressed the
+    /// button on the wrong show should be told so rather than handed a file.
+    #[must_use]
+    pub fn export_rig(&self) -> Option<crate::library::mvr::write::Exported> {
+        crate::library::mvr::write::write_archive(self.show.patched(), &|modes| {
+            self.library.published_archive(modes)
+        })
     }
 
     /// Files the step a command has just taken, if it took one.
@@ -2818,6 +2838,129 @@ mod rig_tests {
                 .position,
             prism_domain::Vec3::new(-2.0, 6.0, 1.5)
         );
+    }
+
+    /// **B65 settled what S62 left open**: the plan's matrix is the three axes
+    /// the fixture is turned to, so a quarter turn about the vertical arrives as
+    /// this desk's `rotation.y` of 90 (its frame is left handed, so MVR's
+    /// `u = {0,-1,0}` is the positive one here).
+    #[test]
+    fn a_rig_arrives_facing_the_way_the_plan_says() {
+        let mut file = ShowFile::default();
+        let archive = plan(
+            &planned_at(
+                "Turned",
+                1,
+                1,
+                "<Matrix>{0,-1,0}{1,0,0}{0,0,1}{1000,2000,3000}</Matrix>",
+            ),
+            4,
+        );
+        let (_, report) = file.import_rig(&archive).expect("the plan is taken");
+        assert_eq!(report.placed, 1);
+        let turned = file.show.fixture(prism_domain::FixtureId::new(1)).unwrap();
+        assert!(
+            (turned.rotation.y - 90.0).abs() < 1e-6,
+            "{:?}",
+            turned.rotation
+        );
+        assert!(turned.rotation.x.abs() < 1e-6 && turned.rotation.z.abs() < 1e-6);
+        assert_eq!(turned.position, prism_domain::Vec3::new(1.0, 3.0, 2.0));
+    }
+
+    /// **The loop closed** (B65): a show's rig, exported and imported into an
+    /// empty show, is the same rig — numbers, names, addresses, places and
+    /// facings, with the profile embedded.
+    #[test]
+    fn an_exported_rig_imports_as_the_rig_it_was() {
+        let mut source = ShowFile::default();
+        source
+            .show
+            .embed_fixture_type(crate::testkit::dimmer_type())
+            .unwrap();
+        for (id, universe, address) in [(5, 1, 1), (6, 2, 100), (30, 4, 511)] {
+            source
+                .show
+                .patch_fixture(crate::testkit::fixture(
+                    id,
+                    "generic.dimmer",
+                    universe,
+                    address,
+                ))
+                .unwrap();
+        }
+        let places = [
+            prism_domain::FixturePlace {
+                id: prism_domain::FixtureId::new(5),
+                position: prism_domain::Vec3::new(-2.0, 6.0, 1.5),
+                rotation: prism_domain::Vec3::new(35.0, 120.0, -15.0),
+            },
+            prism_domain::FixturePlace {
+                id: prism_domain::FixtureId::new(30),
+                position: prism_domain::Vec3::new(0.25, 0.0, -3.0),
+                rotation: prism_domain::Vec3::new(180.0, 0.0, 0.0),
+            },
+        ];
+        source.show.place_fixtures(&places).unwrap();
+
+        let exported = source.export_rig().expect("a rig to export");
+        assert_eq!(exported.report.fixtures, 3);
+        assert_eq!(
+            exported.report.written, 1,
+            "a library with no file of the maker's: the desk writes one"
+        );
+
+        let mut copy = ShowFile::default();
+        let (_, report) = copy.import_rig(&exported.bytes).expect("it is taken");
+        assert_eq!(report.patched, 3);
+        assert_eq!(report.placed, 3);
+        assert_eq!(report.renumbered, 0);
+        for id in [5, 6, 30] {
+            let id = prism_domain::FixtureId::new(id);
+            let was = source.show.fixture(id).unwrap();
+            let now = copy.show.fixture(id).expect("the number is kept");
+            assert_eq!(now.name, was.name);
+            assert_eq!(now.universe, was.universe);
+            assert_eq!(now.address, was.address);
+            for (a, b) in [
+                (now.position.x, was.position.x),
+                (now.position.y, was.position.y),
+                (now.position.z, was.position.z),
+            ] {
+                assert!(
+                    (a - b).abs() < 1e-6,
+                    "{id:?}: {:?} vs {:?}",
+                    now.position,
+                    was.position
+                );
+            }
+            let (m, n) = (
+                prism_domain::orientation(now.rotation),
+                prism_domain::orientation(was.rotation),
+            );
+            assert!(
+                m.iter()
+                    .flatten()
+                    .zip(n.iter().flatten())
+                    .all(|(a, b)| (a - b).abs() < 1e-6),
+                "{id:?}: {:?} vs {:?}",
+                now.rotation,
+                was.rotation
+            );
+        }
+        // And the profile it patches is the footprint the addresses were
+        // written for.
+        let profile = copy
+            .show
+            .fixture_type("generic/dimmer/1ch")
+            .expect("embedded");
+        assert_eq!(profile.footprint, 1);
+    }
+
+    /// An empty show has no rig to export, and says so by writing nothing.
+    #[test]
+    fn a_show_with_nothing_patched_has_no_rig_to_export() {
+        assert!(ShowFile::default().export_rig().is_none());
     }
 
     /// **The operator's show wins over the planner's numbering.**

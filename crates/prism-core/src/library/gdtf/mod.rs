@@ -70,6 +70,7 @@ pub mod xml;
 
 mod attributes;
 mod geometry;
+pub mod write;
 
 use std::collections::{BTreeMap, BTreeSet};
 

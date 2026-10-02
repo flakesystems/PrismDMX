@@ -116,6 +116,11 @@ pub struct Core {
     library_update: Option<Arc<std::sync::Mutex<LibraryUpdate>>>,
     /// What was last reported, so nothing is sent twice.
     library_update_seen: (u32, u32, bool),
+    /// Where the GDTF Share account is kept — the machine's own secret store,
+    /// unless the run was told that nothing may touch the machine
+    /// ([`Self::keep_secrets_in`]). Behind a `Mutex` because [`Store`] takes
+    /// `&mut self` and [`Self::machine_settings`] asks it from `&self`.
+    secrets: std::sync::Mutex<Box<dyn crate::secrets::Store + Send>>,
     /// The fixture library being read in the background, if it is
     /// (2026-09-22). Reading a library of twelve thousand GDTF files is tens
     /// of seconds the first time, and neither start-up nor a command may wait
@@ -246,6 +251,7 @@ impl Core {
             machine,
             library_update: None,
             library_update_seen: (0, 0, false),
+            secrets: std::sync::Mutex::new(Box::new(crate::secrets::Keychain)),
             library_loading: None,
             library_reload: false,
             store,
@@ -268,6 +274,19 @@ impl Core {
             learning: false,
             binding_change: None,
         })
+    }
+
+    /// Keeps the GDTF Share account in `store` instead of the machine's own.
+    ///
+    /// For a run that must not read or write what the operator of the machine
+    /// keeps there: `--mock-devices` (nothing is opened, nothing leaves) uses
+    /// an empty in-memory one, so a test of the account section starts from
+    /// *no account* on a machine that holds a real one.
+    pub fn keep_secrets_in(&mut self, store: Box<dyn crate::secrets::Store + Send>) {
+        *self
+            .secrets
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = store;
     }
 
     /// The show file on disk.
@@ -633,6 +652,7 @@ impl Core {
                 Effect::ExportShow(path) => deltas.extend(self.export_show(path)?),
                 Effect::ImportShow(path) => deltas.extend(self.import_show(path.clone())?),
                 Effect::ImportRig(path) => deltas.extend(self.import_rig(path.clone())?),
+                Effect::ExportRig(path) => deltas.extend(self.export_rig(path.clone())?),
                 Effect::ImportProfile(path) => {
                     deltas.extend(self.import_profile(path.clone())?);
                 }
@@ -715,11 +735,12 @@ impl Core {
             // see `crate::secrets`. Asked of the store each time rather than
             // held, so an account taken out of the credential manager by hand
             // stops being reported without this desk being restarted.
-            library_account: {
-                use crate::secrets::Store as _;
-                crate::secrets::Keychain.recall()
-            }
-            .map(|(user, _)| user),
+            library_account: self
+                .secrets
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .recall()
+                .map(|(user, _)| user),
             surface_profile: settings.surface_profile.clone(),
             jog_sensitivity: settings.jog_sensitivity,
             overrides: self.machine.overrides.clone(),
@@ -1173,6 +1194,52 @@ impl Core {
         Ok(deltas)
     }
 
+    /// Writes the show's rig out as an `.mvr` — **B65**.
+    ///
+    /// Changes nothing: not the show, not the journal, not the Save lamp. The
+    /// file is written to a name of its own beside the destination and moved
+    /// into place, so an export that fails half way never leaves a plan a
+    /// planner would open and find short.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::Store`] if the archive cannot be built or the file cannot be
+    /// written. A show with nothing patched is a notice and not an error: there
+    /// is nothing wrong with the request, only nothing to write.
+    fn export_rig(&mut self, path: std::path::PathBuf) -> Result<Vec<Delta>, CoreError> {
+        let path = self.resolve(path);
+        let Some(exported) = self.file.export_rig() else {
+            return Ok(vec![Delta::Notice {
+                level: NoticeLevel::Warn,
+                message: "nothing is patched, so there is no rig to export".to_owned(),
+            }]);
+        };
+        let partial = path.with_extension("mvr.partial");
+        std::fs::write(&partial, &exported.bytes)
+            .and_then(|()| std::fs::rename(&partial, &path))
+            .map_err(|error| {
+                // Best effort: a half-written sibling is clutter, not a plan.
+                drop(std::fs::remove_file(&partial));
+                CoreError::Store(prism_core::StoreError::Io(error.to_string()))
+            })?;
+        let report = exported.report;
+        log::info(
+            "library",
+            &format!(
+                "exported {} fixtures to {}: {} profiles, {} published and {} written",
+                report.fixtures,
+                path.display(),
+                report.profiles,
+                report.published,
+                report.written,
+            ),
+        );
+        Ok(vec![Delta::Notice {
+            level: NoticeLevel::Info,
+            message: export_notice(&report, &path),
+        }])
+    }
+
     /// Takes one `.gdtf` into this desk's library — **S62**.
     ///
     /// # Why it copies the file and then re-reads everything
@@ -1276,8 +1343,12 @@ impl Core {
             // Said rather than swallowed: on a platform with no secret store
             // the update still runs, and an operator who asked to be
             // remembered has to know they will be asked again.
-            use crate::secrets::Store as _;
-            if let Err(why) = crate::secrets::Keychain.remember(user, password) {
+            let kept = self
+                .secrets
+                .get_mut()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .remember(user, password);
+            if let Err(why) = kept {
                 notices.push(Delta::Notice {
                     level: NoticeLevel::Warn,
                     message: format!("the account was not kept: {why}"),
@@ -1453,8 +1524,12 @@ impl Core {
 
     /// Takes the remembered account out of the secret store — S62.
     fn forget_library_account(&mut self) -> Vec<Delta> {
-        use crate::secrets::Store as _;
-        let message = match crate::secrets::Keychain.forget() {
+        let forgotten = self
+            .secrets
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .forget();
+        let message = match forgotten {
             Ok(()) => "The GDTF Share account was taken out of this machine".to_owned(),
             Err(why) => format!("The account could not be taken out: {why}"),
         };
@@ -1971,6 +2046,35 @@ fn rig_notice(report: &prism_core::RigReport) -> String {
             ". {} renumbered, because the show was already using the plan's number",
             report.renumbered
         ));
+    }
+    text
+}
+
+/// What an exported rig says about itself — **B65**.
+///
+/// It says which of the profiles are the manufacturer's own files and which this
+/// desk wrote, because that is the answer to the question the owner asked of the
+/// export — *what becomes of the Open Fixture Library's fixtures* — and a planner
+/// opening the plan will find the second kind a plainer picture than the first.
+fn export_notice(
+    report: &prism_core::library::mvr::write::ExportReport,
+    path: &std::path::Path,
+) -> String {
+    let mut text = format!(
+        "Rig exported to {}: {} fixtures, {} profiles",
+        path.display(),
+        report.fixtures,
+        report.profiles
+    );
+    match (report.published, report.written) {
+        (0, 0) => {}
+        (published, 0) => text.push_str(&format!(", all as published ({published})")),
+        (0, written) => text.push_str(&format!(
+            ", all written by this desk ({written}) — they have no GDTF of their own"
+        )),
+        (published, written) => text.push_str(&format!(
+            ": {published} as published, {written} written by this desk (they have no GDTF of their own)"
+        )),
     }
     text
 }
@@ -3631,7 +3735,7 @@ mod tests {
     /// than something only a real download can produce. What a real download
     /// does is `share.rs`'s, and that is covered over a fake there.
     mod library_account {
-        use super::{Core, desk};
+        use super::{Core, desk, desk_with};
         use crate::core::LibraryUpdate;
         use prism_domain::{Command, Delta, NoticeLevel};
         use std::sync::{Arc, Mutex};
@@ -3803,6 +3907,10 @@ mod tests {
         fn forgetting_the_account_says_so_and_republishes_the_settings() {
             let dir = tempfile::tempdir().unwrap();
             let (mut core, _frames, driver) = desk(dir.path());
+            // An empty store of its own: the machine's would be shared with
+            // `secrets`' credential-manager test, which empties and fills the
+            // same entry from another thread of this process.
+            core.keep_secrets_in(Box::new(crate::secrets::Remembered::default()));
             let deltas = core.apply(&Command::ForgetLibraryAccount).unwrap();
             assert!(matches!(
                 deltas.as_slice(),
@@ -3814,12 +3922,113 @@ mod tests {
                     Delta::MachineChanged { .. },
                 ]
             ));
-            // This platform keeps nothing, so there is nobody signed in — which
-            // is what `secrets.rs` promises a desk with no store answers.
+            // Nothing is kept, so there is nobody signed in.
             let Some(Delta::MachineChanged { settings }) = deltas.last() else {
                 panic!("the settings were not republished");
             };
             assert_eq!(settings.library_account, None);
+            driver.stop();
+        }
+
+        /// **B65.** Exporting the rig writes a plan another desk can take in, and
+        /// changes nothing here: not the show, not the Save lamp.
+        #[test]
+        fn exporting_the_rig_writes_a_plan_and_changes_nothing() {
+            let dir = tempfile::tempdir().unwrap();
+            let (mut core, _frames, driver) = desk(dir.path());
+            let patched = core.file.show.patched().count();
+            assert!(patched > 0, "the test show has a rig");
+            let dirty = core.file.is_dirty();
+            let path = dir.path().join("out.mvr");
+
+            let deltas = core
+                .apply(&Command::ExportRig {
+                    path: path.display().to_string(),
+                })
+                .unwrap();
+            let [
+                Delta::Notice {
+                    level: NoticeLevel::Info,
+                    message,
+                },
+            ] = deltas.as_slice()
+            else {
+                panic!("one notice and nothing else: {deltas:?}");
+            };
+            assert!(message.starts_with("Rig exported to"), "{message}");
+            assert_eq!(core.file.is_dirty(), dirty, "an export is not an edit");
+            assert!(
+                !dir.path().join("out.mvr.partial").exists(),
+                "the file was moved into place, not left beside it"
+            );
+
+            let bytes = std::fs::read(&path).unwrap();
+            let (_, counts, rig) = prism_core::library::mvr::read_archive(&bytes, true);
+            assert_eq!(rig.fixtures.len(), patched);
+            assert_eq!(counts.fixtures_without_profile, 0);
+            driver.stop();
+        }
+
+        /// A show with nothing patched has no rig: a notice, and no file.
+        #[test]
+        fn exporting_an_empty_rig_says_so_and_writes_nothing() {
+            let dir = tempfile::tempdir().unwrap();
+            let (mut core, _frames, driver) = desk_with(dir.path(), prism_core::ShowFile::new());
+            let path = dir.path().join("empty.mvr");
+            let deltas = core
+                .apply(&Command::ExportRig {
+                    path: path.display().to_string(),
+                })
+                .unwrap();
+            assert!(matches!(
+                deltas.as_slice(),
+                [Delta::Notice {
+                    level: NoticeLevel::Warn,
+                    ..
+                }]
+            ));
+            assert!(!path.exists());
+            driver.stop();
+        }
+
+        /// The path has to be an `.mvr`, as an import's does.
+        #[test]
+        fn exporting_the_rig_to_something_that_is_not_a_plan_is_refused() {
+            let dir = tempfile::tempdir().unwrap();
+            let (mut core, _frames, driver) = desk(dir.path());
+            let path = dir.path().join("out.json");
+            assert!(
+                core.apply(&Command::ExportRig {
+                    path: path.display().to_string(),
+                })
+                .is_err()
+            );
+            assert!(!path.exists());
+            driver.stop();
+        }
+
+        /// The account is asked of the store the desk was **given**, so a run
+        /// that must not touch the machine's own (`--mock-devices`) reads and
+        /// empties one of its own — and the machine's is never asked.
+        #[test]
+        fn the_account_is_the_one_in_the_store_the_desk_was_given() {
+            let dir = tempfile::tempdir().unwrap();
+            let (mut core, _frames, driver) = desk(dir.path());
+            core.keep_secrets_in(Box::new(crate::secrets::Remembered {
+                account: Some(("somebody".to_owned(), "a secret".to_owned())),
+                refuse: false,
+            }));
+            assert_eq!(
+                core.machine_settings().library_account.as_deref(),
+                Some("somebody"),
+                "the name is reported, from the store that was handed over"
+            );
+
+            let deltas = core.apply(&Command::ForgetLibraryAccount).unwrap();
+            let Some(Delta::MachineChanged { settings }) = deltas.last() else {
+                panic!("the settings were not republished");
+            };
+            assert_eq!(settings.library_account, None, "and forgetting empties it");
             driver.stop();
         }
     }

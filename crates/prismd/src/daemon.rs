@@ -410,6 +410,13 @@ impl Daemon {
             bindings.clone(),
         )
         .map_err(StartError::Patch)?;
+        // **`--mock-devices` touches nothing of the machine's** — and an
+        // account the operator keeps in its credential store is the machine's.
+        // A run with doubles for every device starts with an empty one, so what
+        // it reports about the account does not depend on who runs it.
+        if options.mock_devices {
+            core.keep_secrets_in(Box::new(crate::secrets::Remembered::default()));
+        }
         // A desk that has never been told writes down what it started with, so
         // that the first edit is a change to a table rather than the creation of
         // one - and so that `machine.json` says what the keys do even before

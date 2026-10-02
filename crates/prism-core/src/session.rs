@@ -440,6 +440,7 @@ impl SessionState {
             | Command::ExportShow { .. }
             | Command::ImportShow { .. }
             | Command::ImportRig { .. }
+            | Command::ExportRig { .. }
             | Command::ImportProfile { .. }
             | Command::UpdateLibrary { .. }
             | Command::ForgetLibraryAccount => return Err(SessionError::NotASessionCommand),

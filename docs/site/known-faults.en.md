@@ -209,13 +209,19 @@ be fixed in a session of its own.
 
 ## B65 — a rig cannot be exported as MVR
 
+**Fixed for the next release.** *Export rig (MVR)* in the Patch window writes
+every patched fixture with its address, place and turn. Where the library has
+the manufacturer's GDTF for a profile it goes in unchanged; for every other
+profile — the Open Fixture Library's included — the desk writes a GDTF of its
+own, so no fixture is lost.
+
 **Where:** Patch.
 **Severity:** annoying.
 
 **What happens.** A planner's `.mvr` can be imported, but a rig built or
-corrected at the desk cannot be written back out as one. Open question before it
-is built: fixtures from the Open Fixture Library have no GDTF file to put in the
-export, and they must not be lost on the way.
+corrected at the desk cannot be written back out as one. Fixtures from the Open
+Fixture Library have no GDTF file to put in the export, and they must not be
+lost on the way.
 
 ## B66 — several functions sit on several keys
 

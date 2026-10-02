@@ -219,13 +219,19 @@ eigenen Session behoben.
 
 ## B65 — Ein Rig lässt sich nicht als MVR exportieren
 
+**Behoben für die nächste Version.** *Export rig (MVR)* im Patch-Fenster schreibt
+jedes gepatchte Fixture mit Adresse, Ort und Drehung. Wo die Bibliothek das GDTF
+des Herstellers hat, kommt es unverändert hinein; für jedes andere Profil — die
+der Open Fixture Library eingeschlossen — schreibt das Pult ein eigenes GDTF,
+damit kein Fixture verloren geht.
+
 **Wo:** Patch.
 **Schwere:** ärgerlich.
 
 **Was passiert.** Die `.mvr` eines Planers lässt sich importieren, ein am Pult
-gebautes oder korrigiertes Rig aber nicht als eine zurückschreiben. Offene Frage,
-bevor es gebaut wird: Fixtures aus der Open Fixture Library haben keine
-GDTF-Datei, die in den Export könnte, und sie dürfen dabei nicht verloren gehen.
+gebautes oder korrigiertes Rig aber nicht als eine zurückschreiben. Fixtures aus
+der Open Fixture Library haben keine GDTF-Datei, die in den Export könnte, und
+sie dürfen dabei nicht verloren gehen.
 
 ## B66 — Mehrere Funktionen liegen auf mehreren Tasten
 

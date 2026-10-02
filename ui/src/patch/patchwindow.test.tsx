@@ -582,6 +582,37 @@ describe("the patch window", () => {
   });
 
   /**
+   * **B65.** The way back: the key asks the shell where to write the plan and
+   * sends that path, and exists only in the shell — the dialogue is the
+   * operating system's and the archive is the daemon's to write.
+   */
+  it("writes the rig as a plan by asking the shell for a path and sending it", async () => {
+    await desk();
+    expect(screen.queryByTestId("patch-export-rig")).toBeNull();
+
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
+      invoke: (command: string) =>
+        command === "choose_path" ? Promise.resolve("D:/plans/aula-out.mvr") : Promise.resolve(null),
+    };
+    try {
+      const { commands } = await desk();
+      const key = screen.getAllByTestId("patch-export-rig").at(-1) as HTMLElement;
+      expect((key as HTMLButtonElement).disabled).toBe(false);
+      const before = commands().length;
+      fireEvent.click(key);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(commands().slice(before)).toEqual([
+        { t: "ExportRig", path: "D:/plans/aula-out.mvr" },
+      ]);
+    } finally {
+      delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+    }
+  });
+
+  /**
    * **S61.** The Format column, and what the form says a GDTF carries.
    *
    * Driven off the recording rather than off a hand-written answer, because
