@@ -9202,7 +9202,7 @@ it assumes no memory of this conversation and no knowledge of the project.
 
 **S64 is done — the rig leaves the desk as an `.mvr`** (§2.64): B65, with the
 Open Fixture Library's fixtures **written** as GDTF rather than lost, and a plan's
-rotation read on import. **It is committed locally and not pushed**, and the
+rotation read on import. **It is pushed** (`32f6a09`, CI run 37083442176 green on all seven jobs), and the
 export has not met a real planner. The open register entries are **B63**
 (details still owed by the owner) and **B66** (the owner rebinds).
 
@@ -9363,8 +9363,8 @@ Spezifikation und ist an keiner echten Planerdatei geprüft** (§5, *Carried out
 of S64*). Der übernommene `settings.spec.ts`-Test ist behoben: `--mock-devices`
 startet mit einem leeren Schlüsselspeicher (`Core::keep_secrets_in`).
 
-**Zuerst:** `git status` und `git log` ansehen — **S64 ist lokal committet und
-nicht gepusht**, bis der Eigentümer es sagt. Danach, wenn der Eigentümer das
+**Zuerst:** `git status` und `git log` ansehen — **S64 ist gepusht** (`32f6a09`, CI-Lauf
+37083442176 grün auf allen sieben Jobs). Danach, wenn der Eigentümer das
 Rig-Test-Rig hat: einen Export in den Planer laden, aus dem die Planung kam
 (Vectorworks, Capture, Depence, WYSIWYG) und prüfen, ob die Fixtures dort
 stehen, wie sie hängen, und ob das GDTF geladen wird.
