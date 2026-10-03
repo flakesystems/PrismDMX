@@ -3452,6 +3452,7 @@ dependencies = [
  "prism-engine",
  "proptest",
  "serialport",
+ "socket2",
 ]
 
 [[package]]

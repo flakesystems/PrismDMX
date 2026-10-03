@@ -325,6 +325,7 @@ fn place(id: u32, position: Vec3, rotation: Vec3) -> FixturePlace {
         id: FixtureId::new(id),
         position,
         rotation,
+        follow: None,
     }
 }
 

@@ -24,6 +24,23 @@ Every version so far is a **pre-release**.
 
 ## Not yet released
 
+- **Trackers (PSN):** a tracking system — openfollow.app, or anything that speaks
+  PosiStageNet — can now move heads. *Settings → Trackers* switches the receiver
+  on (group, port, interface, the axes, and how long before a tracker counts as
+  quiet) and lists the trackers the desk hears with their position **on your
+  stage**. In the *Viewer 3D* a head is given a tracker (*Follows*), and every head
+  with a pan and a tilt has a new value, **Follow** — the fourth knob of the
+  *Position* bank, `Fixture 1 Follow At 100` — that points it at the tracker. A
+  cue stores it like any value and it fades in over the cue's time; a cue that
+  stores a pan or a tilt lets the head go; **the programmer wins**. When a tracker
+  goes quiet **the head stays where it was** — nothing jumps — and the desk says so
+  once, and once more when it is back. *Checked only against simulated trackers*:
+  which axes a real system uses is your setting (installer's manual, chapter 13).
+  OSC follows.
+- **One fault fewer on the way:** an MVR file that hung a fixture almost exactly
+  vertical read back with an angle error; the matrix is now written to twelve
+  places.
+
 - **Export the rig:** ***Export rig (MVR)*** in the Patch window writes the
   desk's rig as an `.mvr` — every fixture with its number, name, address, place
   and turn, and the GDTF of every profile in use (B65). Where the library holds

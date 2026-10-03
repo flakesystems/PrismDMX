@@ -552,8 +552,37 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 >   | { t: "NewIdentity" }
 >   // ---- the control surface's table, control by control (S38) ----
 >   | { t: "SurfaceBinding"; control: BoundControl; action: SurfaceAction | null }
->   | { t: "SurfaceLearn"; learning: boolean };
+>   | { t: "SurfaceLearn"; learning: boolean }
+>   // ---- how this machine listens for trackers (S32) ----
+>   | { t: "Tracker"; change: TrackerChange };
+>
+> type TrackerChange =                       // one field each; all take effect now
+>   | { t: "Enabled"; enabled: boolean }
+>   | { t: "Interface"; address: string | null }   // an IPv4 address as text
+>   | { t: "Group"; group: string }          // multicast group, or a direct address
+>   | { t: "Port"; port: number }            // 1..=65535
+>   | { t: "Axis"; axis: "X" | "Y" | "Z"; from: "X" | "Y" | "Z"; invert: boolean }
+>   | { t: "Scale"; scale: number }          // metres per unit, > 0
+>   | { t: "Offset"; offset: Vec3 }          // the tracking system's origin, metres
+>   | { t: "Timeout"; milliseconds: number };  // clamped to 100..=60000
 > ```
+>
+> **The tracking group is one variant, `Tracker`, and not eight** *(S32)*, for the
+> reason `SurfaceBinding`'s action is a short list in the test strategy: this enum
+> is inside `Command::ConfigureMachine`, whose value tree has already overflowed a
+> debug test thread's stack twice, and eight more variants inline cost about five
+> kilobytes of it. The inner enum is generated through a boxed strategy, so one
+> slot is paid. The rule is the enum's own — **one field per change** — and none of
+> them needs a restart: the receiver is stopped and started again, which costs a
+> tracker the second it takes. A group or an interface that is not an address, a
+> port of nought, a scale that is not above nought and an offset off the stage are
+> **refused** (`BadTracker…`); the timeout is **clamped**, being a threshold for a
+> warning with a sensible nearest.
+>
+> `MachineSettings::trackers` is `{ enabled, interface, group, port, mapping,
+> timeoutMs }`, `#[serde(default)]` — a daemon before S32 sends none and a client
+> before it never asks, and both mean *not listening*. `Delta::MachineChanged`
+> carries the settings **boxed** (the wire does not know; a box is its contents).
 >
 > **One field per command**, which is `OutputChange`'s rule and `CueProperty`'s
 > before it: a command carrying the whole of `MachineSettings` would make a client
@@ -948,6 +977,8 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 
 > **`Delta::SwitchPositions` — which row a switched knob reads** *(punch-list B52)*. A switching channel (OFL's `switchChannels`) makes one slot a different channel depending on another channel's value. The slot's **key** does not follow — a cue files its value under one key while it runs — but its **name and named steps** do: `AttributeDef::switched` carries, per position of the deciding channel (`by`, an offset in the footprint), the label and the ranges the slot has then. Which position is live is read **off the cable** by the daemon, on the loop that already holds the telemetry frame, whether or not a client listens; the delta carries the whole list `{ fixture, offset, position | null }` and is sent only when it changes, and `Snapshot::switchPositions` carries the same list (`#[serde(default)]`). A client reads the label out of the profile it already mirrors. Every profile embedded before B52 has no table and keeps its one name.
 
+> **`PlaceFixtures` carries the tracker too** *(S32)*. A `FixturePlace` has an optional `follow: { tracker, offset }` — the PSN tracker the head is aimed at and where on the performer — beside `position` and `rotation`, **whole**, so a drag of a following head leaves it following and a tracker panel carries the place it found. Absent means *no tracker*. The daemon answers with `ShowPatch` operations (`add` or `replace` of `/fixtures/N/follow`, or `remove`), and — unlike a placement of heads that follow nothing — with `Effect::Refollow` when the placement set or cleared a tracker or moved a head that has one: the follow layer is rebuilt and handed to the tick alone, **not** the merge body, so a running cue list is not stopped. A tracker above 1023 or an offset off the stage refuses the whole list.
+>
 > **`PlaceFixtures` — where fixtures hang, and which way they face** *(S30)*. `Fixture::position` and `Fixture::rotation` existed from S1 and nothing could set them: `PatchFixture` carries neither on purpose, so a repatch keeps them. The 3D viewer sends this, one command per gesture — *spread these eight along the truss* is one Oops. Each `FixturePlace` is a fixture number, a `position` in metres and a `rotation` in degrees, **whole**, so a client sends what the fixture is after the gesture rather than one field. What the numbers mean is `prism_domain::placement`: show space is Y up with `z` growing upstage, and a rotation is applied **Z, then X, then Y** (`orientation` is `Ry · Rx · Rz`). The daemon answers with a `ShowPatch` of one `replace` per field that moved, and with **no repatch**: where a fixture hangs moves no channel, so the engine is never told — and an Oops over it restores the place alone (`UndoScope::Place`), which repatches nothing either. A fixture that is not patched, a number that is not finite or a coordinate further than `MAX_REACH` (1000 m) from the origin refuses **the whole list** (`FixtureOutOfReach` names the fixture), and a place a fixture already has writes nothing and files no step.
 
 > **`Delta::LibraryUpdate` — how far a download of the fixture library has
@@ -1079,6 +1110,7 @@ type Query =
   | { t: "DarkUniverses" }
   | { t: "OutputStatus" }
   | { t: "ArtNetNodes" }
+  | { t: "Trackers" }                                                  // S32
   | { t: "SurfaceBindings" }
   | { t: "CueTracking"; sequenceId: SequenceId }
   | { t: "CommandLineReading"; text: string }
@@ -1103,6 +1135,8 @@ type Answer =
   | { t: "DarkUniverses"; universes: UniverseId[] }
   | { t: "ArtNetNodes"; nodes: ArtNetNodeInfo[]; listening: boolean; error: string | null;
       counters: ArtNetCounters; remedy: string | null }
+  | { t: "Trackers"; trackers: SeenTracker[]; listening: boolean;      // S32
+      error: string | null; rejected: number }
   | { t: "SurfaceBindings"; controls: SurfaceControl[]; device: string;
       profile: string | null; revision: number; learning: boolean }
   | { t: "CueTracking"; sequenceId: SequenceId; cues: CueTrackingRow[] }
@@ -1323,6 +1357,21 @@ interface StorePreview {
 > reconnecting is the one thing that cannot recover it (`docs/MCU_MAPPING.md`
 > §2.7). A client that wrote its own sentence would eventually write that one.
 
+> **`Trackers` is `ArtNetNodes`' argument one protocol along** *(S32)*. A tracker the
+> desk has heard is an **observation about the network**: it changes while nobody
+> does anything, no command causes it, and it is gone at the next start — so it is
+> neither show nor machine and is not a delta, and the settings panel asks while
+> it is open. Each `SeenTracker` is `{ id, name, position, ageMs, health,
+> followers }`: the **position in show space**, after the mapping — which is the
+> line an installer reads to see whether the axes are right — an **age** and not a
+> time, for the reason `NodeHealth` carries one, `health` *Live* or *Quiet*
+> against the configured timeout, and how many heads follow it. A tracker named and
+> never heard has `ageMs` of `u64::MAX`, the one integer a JavaScript number cannot
+> hold; a tracker some head follows and nobody has heard is in the list anyway,
+> *Quiet* — it is the row an installer is looking for. `listening` is read before
+> the list, and `error` says why the receiver is closed in the daemon's own words;
+> `rejected` counts datagrams on the group that were not PSN version 2.
+>
 > **`ArtNetNodes` is the variant S46 needed** *(S46)*. It answers **what is on
 > this network**, and it exists because `Health::Ok` on an Art-Net output has
 > meant *the socket accepted the datagram* since S9 — and UDP always accepts it.

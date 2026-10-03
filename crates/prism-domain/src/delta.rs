@@ -208,7 +208,10 @@ pub enum Delta {
             any(test, feature = "proptest"),
             proptest(strategy = "crate::arb::boxed()")
         )]
-        settings: MachineSettings,
+        ///
+        /// **Boxed**, because it is by far the largest thing a delta carries -
+        /// and the wire does not know: a box is its contents.
+        settings: Box<MachineSettings>,
     },
     /// The daemon opened, made or renamed a show file — S37.
     ///

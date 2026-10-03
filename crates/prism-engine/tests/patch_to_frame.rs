@@ -88,6 +88,7 @@ fn fixture_type(id: &str, footprint: u16, attributes: Vec<AttributeDef>) -> Fixt
 fn fixture(id: u32, type_id: &str, universe: u32, address: u16) -> Fixture {
     Fixture {
         software_dimmer: true,
+        follow: None,
         id: FixtureId::new(id),
         name: format!("Fixture {id}"),
         type_id: type_id.to_owned(),

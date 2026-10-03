@@ -310,6 +310,23 @@ export function machine(overrides: Partial<MachineSettings> = {}): MachineSettin
     fixtureLibrary: null,
     surfaceProfile: null,
     libraryAccount: null,
+    // Listening, on a group that is not the default, with a mapping that is not
+    // the default either - S14's rule again, so a panel that read the defaults
+    // out of the code instead of the daemon cannot pass.
+    trackers: {
+      enabled: true,
+      interface: "192.168.1.20",
+      group: "236.10.10.11",
+      port: 56570,
+      mapping: {
+        x: { from: "X", invert: true },
+        y: { from: "Z", invert: false },
+        z: { from: "Y", invert: true },
+        scale: 0.001,
+        offset: { x: 1.5, y: 0, z: -2 },
+      },
+      timeoutMs: 750,
+    },
     overrides: [],
     ...overrides,
   };

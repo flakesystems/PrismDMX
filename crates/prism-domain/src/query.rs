@@ -632,6 +632,18 @@ pub enum Query {
     /// receive thread keeps, and the question reads it. What the query does
     /// **not** do is send anything, which is §5.2's first rule.
     ArtNetNodes,
+    /// The trackers this desk can hear - **S32**.
+    ///
+    /// `Query::ArtNetNodes`' argument one protocol along: a tracker the desk has
+    /// heard is an **observation about the network**. It changes while nobody
+    /// does anything, no command causes it, and it is gone at the next start, so
+    /// it is neither show nor machine and is not written down. A settings window
+    /// asks while its panel is open and stops asking when it closes.
+    ///
+    /// The answer is the line an installer reads to see whether the *mapping* is
+    /// right - each tracker's position **in show space**, after the axes have
+    /// been lined up - and which of them are quiet.
+    Trackers,
     /// The binding table **in force**, control by control — S38.
     ///
     /// A question rather than a field of the snapshot, and the reason is this
@@ -750,7 +762,7 @@ pub enum ResourceKind {
 }
 
 /// The daemon's answer to a [`Query`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 #[serde(tag = "t", rename_all_fields = "camelCase")]
 pub enum Answer {
@@ -844,6 +856,27 @@ pub enum Answer {
             proptest(strategy = "crate::arb::small_vec(3)")
         )]
         outputs: Vec<OutputStatusInfo>,
+    },
+    /// The trackers this desk has heard from, lowest number first - S32.
+    Trackers {
+        /// One per tracker heard since the receiver started. One that has gone
+        /// quiet **stays**, with its age climbing and its heads holding the last
+        /// position - *it was here and it stopped* is the fact an operator needs.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(2)")
+        )]
+        trackers: Vec<crate::SeenTracker>,
+        /// Whether the receive socket is open. `false` with `error` empty means
+        /// the receiver is switched off; with `error` set, that it could not
+        /// start - another program holding the port, an interface that is not on
+        /// this machine.
+        listening: bool,
+        /// Why nothing is listening, in the daemon's own words, or `None`.
+        error: Option<String>,
+        /// Datagrams read that were not PSN, or were damaged. A tracker that
+        /// "sends" and is never seen is, nine times in ten, this counting up.
+        rejected: u64,
     },
     /// The Art-Net nodes this desk has heard from — S46.
     ArtNetNodes {

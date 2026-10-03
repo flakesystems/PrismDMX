@@ -229,6 +229,58 @@ describe("the place panel", () => {
     expect(screen.getByTestId("viewer-place-z")).toHaveProperty("value", "4");
   });
 
+  /**
+   * **A place carries the tracker too** - S32. Where a head hangs and what it is
+   * aimed at from there are one fact, so one command and one Oops.
+   */
+  it("gives the selection a tracker in the same command that places it", () => {
+    const { places } = viewer({ programmer: selecting([1, 2]) });
+    // Nothing follows anything yet, so the fields start blank.
+    expect(screen.getByTestId("viewer-place-tracker")).toHaveProperty("value", "");
+    // The form starts from the first fixture's place, so blank what is not being
+    // changed: a blank field keeps each fixture's own.
+    for (const key of ["x", "y", "z"]) {
+      fireEvent.change(screen.getByTestId(`viewer-place-${key}`), { target: { value: "" } });
+    }
+    fireEvent.change(screen.getByTestId("viewer-place-tracker"), { target: { value: "5" } });
+    fireEvent.change(screen.getByTestId("viewer-place-oy"), { target: { value: "0,4" } });
+    fireEvent.click(screen.getByTestId("viewer-place-set"));
+    expect(places()).toEqual([
+      {
+        t: "PlaceFixtures",
+        placements: [
+          {
+            id: 1,
+            position: { x: -2, y: 6, z: 1 },
+            rotation: { x: 0, y: 0, z: 0 },
+            follow: { tracker: 5, offset: { x: 0, y: 0.4, z: 0 } },
+          },
+          {
+            id: 2,
+            position: { x: 2, y: 6, z: 1 },
+            rotation: { x: 0, y: 0, z: 0 },
+            follow: { tracker: 5, offset: { x: 0, y: 0.4, z: 0 } },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("refuses a tracker that is not a number from nought to 1023, or a dash", () => {
+    viewer({ programmer: selecting([1]) });
+    const field = screen.getByTestId("viewer-place-tracker");
+    for (const bad of ["1024", "-1", "anna"]) {
+      fireEvent.change(field, { target: { value: bad } });
+      expect(field.getAttribute("aria-invalid"), bad).toBe("true");
+      expect(screen.getByTestId("viewer-place-set")).toHaveProperty("disabled", true);
+    }
+    for (const good of ["0", "1023", "-", ""]) {
+      fireEvent.change(field, { target: { value: good } });
+      expect(field.getAttribute("aria-invalid"), good).toBe("false");
+      expect(screen.getByTestId("viewer-place-set")).toHaveProperty("disabled", false);
+    }
+  });
+
   it("lists at most eight numbers of a long selection", () => {
     const fixtures: Record<string, JsonValue> = {};
     for (let id = 1; id <= 12; id += 1) {

@@ -165,6 +165,25 @@ pub enum AttributeType {
     /// `Ch 7`, the channel's place in the fixture, which is the number an
     /// operator is holding a patch sheet for.
     Raw,
+    /// **How far this head follows its tracker** — S32, and the second row that
+    /// is not a kind of channel.
+    ///
+    /// A moving head that has been given a tracker (`Fixture::follow`) points
+    /// where the tracker is in proportion to this value: nought leaves the head
+    /// to whatever the cues and the programmer say about pan and tilt,
+    /// [`u16::MAX`] puts it on the tracker whatever they say, and a value
+    /// between mixes the two. It is a **fraction** and not a switch for the
+    /// reason a dimmer is: a cue that turns following on fades over its own
+    /// fade time, so the head glides onto the performer instead of snapping to
+    /// them, and a cue that turns it off glides back.
+    ///
+    /// It has **no DMX channel** and is not in any profile — the merge plan
+    /// gives it to every fixture that has both a pan and a tilt, exactly as it
+    /// gives a software dimmer to one with no intensity (S43), so no library,
+    /// no GDTF export and no MVR carries it. It is LTP and rests at nought, so a
+    /// show that never mentions it behaves as it always did, and it is what a
+    /// cue stores to say *follow from here* — it tracks like every other value.
+    Follow,
 }
 
 impl AttributeType {
@@ -205,7 +224,11 @@ impl AttributeType {
     /// *Colour* or *Prism*, and four colour-wheel rotations — 53 blade channels
     /// with no relation to the blade they drive, and 13 haze channels called
     /// fog.
-    pub const ALL: [Self; 41] = [
+    ///
+    /// **Forty-two since S32**: [`Self::Follow`] is appended after
+    /// [`Self::Raw`], which stays the last *kind of channel*. It is not one — it
+    /// has no channel — and nothing about the first forty-one moved.
+    pub const ALL: [Self; 42] = [
         Self::Dimmer,
         Self::Pan,
         Self::Tilt,
@@ -247,6 +270,7 @@ impl AttributeType {
         Self::BladeRotation,
         Self::BladeSystem,
         Self::Raw,
+        Self::Follow,
     ];
 
     /// Whether this attribute is an **additive emitter** — a lamp that makes
@@ -301,7 +325,7 @@ impl AttributeType {
     pub const fn feature_group(self) -> FeatureGroup {
         match self {
             Self::Dimmer => FeatureGroup::Dimmer,
-            Self::Pan | Self::Tilt | Self::PositionSpeed => FeatureGroup::Position,
+            Self::Pan | Self::Tilt | Self::PositionSpeed | Self::Follow => FeatureGroup::Position,
             // The pattern in the beam, and how fast it moves.
             Self::Gobo
             | Self::Prism
@@ -544,6 +568,9 @@ impl FeatureGroup {
                 AttributeType::Pan,
                 AttributeType::Tilt,
                 AttributeType::PositionSpeed,
+                // **S32.** Fourth, so Pan, Tilt, Speed and Follow are the one
+                // page of four a head has always had.
+                AttributeType::Follow,
             ],
             Self::Color => &[
                 AttributeType::Red,
@@ -1049,6 +1076,25 @@ impl FixtureType {
             .iter()
             .any(|def| def.attribute == AttributeType::Dimmer)
     }
+
+    /// Whether the desk gives this mode a [`AttributeType::Follow`] value - S32.
+    ///
+    /// **A head that can be aimed**: a first pan and a first tilt, which are the
+    /// two things the aim calculation moves. Everything else - a PAR, a
+    /// scroller, a strip - has nothing to point and so nothing to follow with.
+    /// It depends on the profile alone, and not on whether a tracker is
+    /// assigned, so assigning one never changes the merge plan: the slot is
+    /// there for every head, and which of them it does anything for is the
+    /// show's business ([`crate::Fixture::follow`]).
+    #[must_use]
+    pub fn can_follow(&self) -> bool {
+        let has = |attribute| {
+            self.attributes
+                .iter()
+                .any(|def| def.attribute == attribute && def.occurrence == 0)
+        };
+        has(AttributeType::Pan) && has(AttributeType::Tilt)
+    }
 }
 
 #[cfg(test)]
@@ -1096,8 +1142,8 @@ mod tests {
     /// would not. A venue that never patches a CMY head must not have to page
     /// past indigo to find blue.
     #[test]
-    fn the_forty_one_attribute_types_exist_and_the_first_fifteen_are_where_they_were() {
-        assert_eq!(AttributeType::ALL.len(), 41);
+    fn the_forty_two_attribute_types_exist_and_the_first_fifteen_are_where_they_were() {
+        assert_eq!(AttributeType::ALL.len(), 42);
         assert_eq!(
             &AttributeType::ALL[..15],
             &[
@@ -1141,15 +1187,16 @@ mod tests {
                 AttributeType::BladeRotation,
                 AttributeType::BladeSystem,
                 AttributeType::Raw,
+                AttributeType::Follow,
             ]
         );
         // Every one of them exactly once, which is what stops a copy-and-paste
-        // in a forty-one-line array from going unnoticed.
+        // in a forty-two-line array from going unnoticed.
         let mut sorted = AttributeType::ALL;
         sorted.sort_unstable();
         let mut unique = sorted.to_vec();
         unique.dedup();
-        assert_eq!(unique.len(), 41);
+        assert_eq!(unique.len(), 42);
     }
 
     /// **An absent occurrence is the first one, and the first one writes
@@ -1439,7 +1486,12 @@ mod tests {
             Some(AttributeType::PositionSpeed),
             "S51 gave the position bank a third knob (B38)"
         );
-        assert_eq!(FeatureGroup::Position.parameter(3), None);
+        assert_eq!(
+            FeatureGroup::Position.parameter(3),
+            Some(AttributeType::Follow),
+            "S32 gave it a fourth: how far a head follows its tracker"
+        );
+        assert_eq!(FeatureGroup::Position.parameter(4), None);
         assert_eq!(FeatureGroup::Dimmer.parameter(u32::MAX), None);
     }
 
@@ -1502,7 +1554,7 @@ mod tests {
              | \"EffectSpeed\" | \"Frost\" | \"Blade\" | \"BeamPosition\" | \"Fog\" \
              | \"Speed\" | \"Sound\" | \"WarmWhite\" | \"ColdWhite\" \
              | \"ColorWheelRotation\" | \"Haze\" | \"BladeRotation\" \
-             | \"BladeSystem\" | \"Raw\""
+             | \"BladeSystem\" | \"Raw\" | \"Follow\""
         );
         assert_eq!(
             FeatureGroup::inline(&cfg),

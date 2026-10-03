@@ -22,6 +22,24 @@ Alle Versionen bisher sind **Vorabversionen**.
 
 ## Noch nicht veröffentlicht
 
+- **Tracker (PSN):** ein Tracking-System — openfollow.app oder alles, was
+  PosiStageNet spricht — kann jetzt Moving Heads führen. *Settings → Trackers*
+  schaltet den Empfänger ein (Gruppe, Port, Schnittstelle, die Achsen und die
+  Zeit, nach der ein Tracker als still gilt) und listet, welche Tracker das Pult
+  hört, mit ihrer Position **auf Ihrer Bühne**. Im *Viewer 3D* gibt man einem Kopf
+  einen Tracker (*Follows*), und jeder Kopf mit Pan und Tilt hat einen neuen Wert
+  **Follow** — vierter Knopf der Bank *Position*, `Fixture 1 Follow At 100` —,
+  der ihn auf den Tracker richtet. Eine Cue speichert ihn wie jeden Wert, und er
+  blendet über die Cue-Zeit ein; eine Cue, die Pan oder Tilt speichert, lässt den
+  Kopf wieder los; **der Programmer gewinnt**. Wird ein Tracker still, **bleibt der
+  Kopf, wo er war** — nichts springt —, das Pult sagt es einmal und noch einmal,
+  wenn er zurück ist. *Nur an simulierten Trackern geprüft*: welche Achsen ein
+  echtes System benutzt, ist Ihre Einstellung (Installationshandbuch, Kapitel 13).
+  OSC folgt.
+- **Mehr als ein Pult-Fehler weniger:** eine MVR-Datei, die ein Fixture beinahe
+  senkrecht gekippt hängte, las sich mit einem Winkelfehler zurück; die Matrix wird
+  jetzt mit zwölf Stellen geschrieben.
+
 - **Rig exportieren:** ***Export rig (MVR)*** im Patch-Fenster schreibt das Rig
   des Pults als `.mvr` — jedes Fixture mit Nummer, Namen, Adresse, Ort und
   Drehung, dazu das GDTF jedes verwendeten Profils (B65). Wo die Bibliothek die

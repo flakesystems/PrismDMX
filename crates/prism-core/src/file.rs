@@ -1773,6 +1773,7 @@ impl ShowFile {
                     // (`mvr::write::matrix_of`), and a plan that states none
                     // hangs the fixture as its profile describes it.
                     rotation: fixture.rotation.unwrap_or(prism_domain::Vec3::ZERO),
+                    follow: None,
                 };
                 if place.is_reachable() {
                     places.push(place);
@@ -1987,7 +1988,16 @@ impl ShowFile {
                 Image::Place(place) => {
                     let ops = self.show.place_fixtures(core::slice::from_ref(place))?;
                     if !ops.is_empty() {
-                        // No `Repatch`, for the reason the command has none.
+                        // No `Repatch`, for the reason the command has none -
+                        // but a head with a tracker is taken back to where it
+                        // was aimed from, which the follow layer is told.
+                        if self
+                            .show
+                            .placement_reaches_follow(core::iter::once(place.id), &ops)
+                            && !applied.effects.contains(&Effect::Refollow)
+                        {
+                            applied.effects.push(Effect::Refollow);
+                        }
                         applied.deltas.push(Delta::ShowPatch { ops });
                     }
                 }
@@ -2894,11 +2904,13 @@ mod rig_tests {
                 id: prism_domain::FixtureId::new(5),
                 position: prism_domain::Vec3::new(-2.0, 6.0, 1.5),
                 rotation: prism_domain::Vec3::new(35.0, 120.0, -15.0),
+                follow: None,
             },
             prism_domain::FixturePlace {
                 id: prism_domain::FixtureId::new(30),
                 position: prism_domain::Vec3::new(0.25, 0.0, -3.0),
                 rotation: prism_domain::Vec3::new(180.0, 0.0, 0.0),
+                follow: None,
             },
         ];
         source.show.place_fixtures(&places).unwrap();

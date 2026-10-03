@@ -78,4 +78,5 @@ prismd --help          # every flag, and every one of them is also a setting
 
 Built in **S17** and **S18** (the D2 gate). Extended by S22 (the surface with no
 client), S33 (the rig), S37 (every flag becomes a setting), S46 (node
-discovery) and **S49** (it runs the command line now). `PROGRESS.md` §2.
+discovery), S49 (it runs the command line now) and **S32** (the tracker receiver
+thread, and the follow layer handed to the tick on its own). `PROGRESS.md` §2.

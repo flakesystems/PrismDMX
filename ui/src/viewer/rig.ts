@@ -17,7 +17,7 @@
  * error and nothing says it is.
  */
 
-import type { JsonValue } from "../bindings";
+import type { FollowTarget, JsonValue } from "../bindings";
 import { isArray, isObject } from "../mirror/patch";
 import { pointerToken, valueAt } from "../mirror/select";
 import type { Device } from "./device";
@@ -123,6 +123,11 @@ export interface RigFixture {
   readonly rotation: V3;
   /** {@link rotation} as a matrix, worked out once per render rather than per frame. */
   readonly orientation: Mat3;
+  /**
+   * The tracker it follows, or `null` — **S32**. Part of where a fixture is
+   * *aimed from*, so it travels with the place: `PlaceFixtures` carries both.
+   */
+  readonly follow: FollowTarget | null;
   /** Whether it is still where a patch leaves it: at the origin, turned by nothing. */
   readonly unplaced: boolean;
   /** Width, height and depth of its body, in metres. */
@@ -290,6 +295,7 @@ export function rigOf(show: JsonValue | null): readonly RigFixture[] {
     const position = vectorOf(entry.position ?? null, ORIGIN);
     const rotation = vectorOf(entry.rotation ?? null, ORIGIN);
     rig.push({
+      follow: followOf(entry.follow ?? null),
       id,
       name: typeof entry.name === "string" ? entry.name : "",
       universe: finite(entry.universe ?? null, 0),
@@ -303,6 +309,21 @@ export function rigOf(show: JsonValue | null): readonly RigFixture[] {
     });
   }
   return rig.sort((left, right) => left.id - right.id);
+}
+
+/**
+ * The tracker a fixture follows, out of the show document - or `null` for none,
+ * and for anything that is not a tracker number and an offset.
+ */
+function followOf(value: JsonValue | null): FollowTarget | null {
+  if (value === null || !isObject(value)) {
+    return null;
+  }
+  const tracker = value.tracker;
+  if (typeof tracker !== "number" || !Number.isInteger(tracker) || tracker < 0) {
+    return null;
+  }
+  return { tracker, offset: vectorOf(value.offset ?? null, ORIGIN) };
 }
 
 /** Whether every component is nought. */

@@ -417,6 +417,17 @@ impl Daemon {
         if options.mock_devices {
             core.keep_secrets_in(Box::new(crate::secrets::Remembered::default()));
         }
+        // **The one place the tracker receiver is given a socket** - S32. Not
+        // under `--mock-devices`, where nothing may touch a network, and a
+        // reason rather than an absence when it is not: a panel that said *switch
+        // it on* would be telling an operator to do something that would not
+        // help. It is configured from this machine's settings on the way in, so
+        // a desk set up to listen for trackers listens from its first tick.
+        core.adopt_tracking(if options.mock_devices {
+            crate::tracking::Tracking::disabled("trackers are off for this run (--mock-devices)")
+        } else {
+            crate::tracking::Tracking::system()
+        });
         // A desk that has never been told writes down what it started with, so
         // that the first edit is a change to a table rather than the creation of
         // one - and so that `machine.json` says what the keys do even before
@@ -892,6 +903,10 @@ impl Daemon {
                             .map(|surface| surface.status(profile.as_deref())),
                     );
                     for delta in self.desk.poll_autosave() {
+                        self.server.broadcast(delta).await;
+                    }
+                    // A followed tracker that has gone quiet, or come back - S32.
+                    for delta in self.desk.poll_trackers() {
                         self.server.broadcast(delta).await;
                     }
                     for delta in self.output_health_changes(&mut health) {

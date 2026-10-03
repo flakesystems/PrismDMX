@@ -220,6 +220,11 @@ is being told, whatever told it: the programmer, a cue, a master.
   **Spread** lays them out across the stage in the order you selected them,
   centred on **X**, a **Gap** apart (a metre when it is empty): `Fixture 1 Thru
   8`, *Spread*, is a truss of eight hung in one go. Either is **one Oops**.
+- **Follows.** Under *Spread* the panel has a **Tracker** field — the PSN tracker
+  a head is pointed at — and an offset above it (see *A head that follows a
+  performer* in chapter 8). It is part of the same gesture: *Set* sends it with
+  the place, a blank field keeps what each fixture has, and a dash takes the
+  tracker away. Dragging a head that follows leaves it following.
 - **What the numbers mean.** Metres, measured from a point you choose — the
   middle of the stage front at floor level is a good one. **X** runs across the
   stage (positive is stage left, which is the audience's right), **Y** is height
@@ -297,11 +302,13 @@ Chapter 5.
 
 ### Settings · `Settings`
 
-Five tabs: *Outputs*, *Devices*, *Controls*, *Show files*, *This machine*. It is
-a **window** and not a dialog: it lies on the canvas like any other, the show
-keeps running behind it, and you can leave it open on a second screen. Everything
-in it is described in the [installer's manual](installer.en.md), except *Show
-files*, which is in chapter 12.
+Six tabs: *Outputs*, *Devices*, *Controls*, *Trackers*, *Show files*, *This
+machine*. It is a **window** and not a dialog: it lies on the canvas like any
+other, the show keeps running behind it, and you can leave it open on a second
+screen. Everything in it is described in the [installer's manual](installer.en.md),
+except *Show files*, which is in chapter 12, and *Trackers*, which is split
+between that manual (the network, the axes) and chapter 8 here (what a head does
+with one).
 
 ### Executors · `Executors`
 
@@ -482,6 +489,11 @@ Full                the selection to full, with nothing else in the line
 Seven banks — *Dimmer*, *Position*, *Gobo*, *Color*, *Beam*, *Focus*, *Control* —
 carrying **only what the selected fixtures have**. Select a four-colour PAR and
 the colour bank has four knobs.
+
+**The *Position* bank has a fourth knob on every head that can be aimed**:
+*Follow*, how far the head follows its tracker (chapter 8). It is the desk's own
+and is in no profile; a fixture with a pan and a tilt has it and one without does
+not.
 
 **Every knob carries the name the manufacturer gave that channel** — *Rotating
 Gobo*, *Color Wheel 2* — and not the desk's generic word. Select two heads that
@@ -681,6 +693,53 @@ is no snap-back, on no screen and on no motor fader. And every handle on one
 crossfade shows **the same position**: push it in a browser and the X-Touch's
 motor fader follows, and the other way round. While you are touching the motor
 fader, the desk writes nothing to it.
+
+### A head that follows a performer
+
+A tracking system — **PSN** (PosiStageNet; openfollow.app is one source of it) —
+tells the desk where each performer stands. A moving head can be pointed at one
+of them, and a cue can say *from here on this head is on her* and *from here on
+it is not*.
+
+**Set it up once.** The network side — the group, the interface, which way is
+up — is the installer's, in the [installer's manual](installer.en.md#13-trackers-psn).
+Then, at the desk:
+
+1. *Settings → Trackers*: tick **Listen for trackers**. The list at the bottom
+   fills with the trackers the desk hears, each with its position **on your
+   stage** and how long ago it last spoke. Walk the performer to the front left
+   corner and read the numbers: they are what the heads will be aimed at.
+2. *Viewer 3D*: select the heads (`Fixture 1 Thru 4`), type the tracker's number
+   under **Follows → Tracker** and press **Set**. The **Y** below it is how far
+   *above* the tracker to aim — the chest of a performer who wears it at the
+   belt. A dash (`-`) takes the tracker away again. It is the same command that
+   places a fixture, so it is **one Oops**.
+
+**Then it is a value like any other.** Every head that can be aimed — it has a
+pan and a tilt — has a **Follow** value: the fourth knob of the *Position* bank,
+or `Fixture 1 Follow At 100` on the line. Nought leaves pan and tilt to the cues
+and the programmer; full puts the head on its tracker whatever they say; between
+is part of the way. A head with no tracker given to it does nothing with it.
+
+- **A cue stores it.** *Follow* at full in a cue means *from here, this head is
+  on its tracker*, and it fades in over the cue's fade time — the head glides
+  onto the performer instead of snapping. It is carried forward like any value.
+- **A cue that stores a position lets the head go.** Store a pan or a tilt for a
+  head that is following and the head goes to that position *in that cue*: the
+  cue is saying where it goes. A cue that stores *Follow* itself is taken at its
+  word.
+- **The programmer wins**, as it does over every cue. A pan or a tilt you are
+  holding is yours, and the head follows on its other axis; `Clear` hands it
+  back.
+- **A performer who stops being heard is held, not lost.** If the tracker stops
+  sending for half a second the head stays where it last pointed and the desk
+  says so once in the notice line; it says so once more when the tracker is back.
+  Nothing jumps. *Settings → Trackers* lists each tracker with how long it has
+  been quiet.
+- **Nothing here is fast to get right on the first try**: a tracking system does
+  not say which way is up or what a unit is, and a default is a guess. Check the
+  mapping against one performer and the list before a show — the installer's
+  manual has the steps.
 
 ---
 
@@ -943,7 +1002,10 @@ Named here rather than discovered by you:
   plan's position and its turn; the turn is read as the MVR specification states
   it and has not yet been checked against a real planner's file.
 - **No web remote** — a phone or tablet cannot run the desk yet. Planned.
-- **No timecode, no OSC, no PSN.** Planned.
+- **No timecode, no OSC.** Planned. **PSN** — a tracking system moving heads —
+  is built, and has been run against simulated trackers and nothing else: the
+  axes a real system uses are the one thing nobody has checked on a real
+  tracker, which is why the mapping is yours to set (chapter 8).
 - **No effect engine** — the *Phaser Editor* window is empty because what goes
   under it is missing.
 - **Autostart on Windows only.** The setting exists everywhere, the entry is only

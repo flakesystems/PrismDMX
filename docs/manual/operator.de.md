@@ -227,6 +227,12 @@ von einem Master.
   ausgewählt haben, quer über die Bühne, mittig um **X** und im Abstand **Gap**
   (ein Meter, wenn es leer ist): `Fixture 1 Thru 8`, *Spread*, ist eine Traverse
   mit acht Geräten in einem Zug. Beides ist **ein Oops**.
+- **Follows.** Unter *Spread* hat das Feld ein Feld **Tracker** — der PSN-Tracker,
+  auf den ein Kopf gerichtet wird — und darüber einen Versatz (siehe *Ein Kopf,
+  der einem Darsteller folgt* in Kapitel 8). Es gehört zur selben Geste: *Set*
+  schickt ihn mit dem Ort, ein leeres Feld lässt jedem Fixture seinen eigenen
+  Wert, ein Strich nimmt den Tracker weg. Einen Kopf zu ziehen, der folgt, lässt
+  ihn folgend.
 - **Was die Zahlen bedeuten.** Meter, gemessen von einem Punkt, den Sie wählen —
   die Mitte der Bühnenvorderkante auf Bodenhöhe ist ein guter. **X** läuft quer
   über die Bühne (positiv ist Bühne links, also vom Publikum aus rechts), **Y**
@@ -307,11 +313,13 @@ Adresse. Kapitel 5.
 
 ### Settings · `Settings`
 
-Fünf Reiter: *Outputs*, *Devices*, *Controls*, *Show files*, *This machine*. Es
-ist ein **Fenster** und kein Dialog: es liegt auf der Leinwand wie jedes andere,
-die Show läuft dahinter weiter, und Sie können es auf einem zweiten Bildschirm
-offen lassen. Alles darin ist im [Installationshandbuch](installer.de.md)
-beschrieben, außer *Show files*, das in Kapitel 12 steht.
+Sechs Reiter: *Outputs*, *Devices*, *Controls*, *Trackers*, *Show files*, *This
+machine*. Es ist ein **Fenster** und kein Dialog: es liegt auf der Leinwand wie
+jedes andere, die Show läuft dahinter weiter, und Sie können es auf einem
+zweiten Bildschirm offen lassen. Alles darin ist im
+[Installationshandbuch](installer.de.md) beschrieben, außer *Show files*, das in
+Kapitel 12 steht, und *Trackers*, das sich teilt: das Netz und die Achsen im
+Installationshandbuch, was ein Kopf damit tut in Kapitel 8.
 
 ### Executors · `Executors`
 
@@ -501,6 +509,11 @@ Full                die Auswahl auf voll, sonst nichts in der Zeile
 Sieben Bänke — *Dimmer*, *Position*, *Gobo*, *Color*, *Beam*, *Focus*,
 *Control* — und darauf **nur, was die ausgewählten Fixtures haben**. Wählen Sie
 einen vierfarbigen PAR aus, hat die Farbbank vier Knöpfe.
+
+**Die Bank *Position* hat an jedem Kopf, der sich ausrichten lässt, einen
+vierten Knopf**: *Follow*, wie weit der Kopf seinem Tracker folgt (Kapitel 8).
+Er gehört dem Pult selbst und steht in keinem Profil; ein Fixture mit Pan und
+Tilt hat ihn, eines ohne nicht.
 
 **Jeder Knopf trägt den Namen, den der Hersteller diesem Kanal gegeben hat** —
 *Rotating Gobo*, *Color Wheel 2* — und nicht das Allgemeinwort des Pults. Wählen
@@ -710,6 +723,57 @@ gestellt hat.** Es gibt keinen Rücksprung, auf keinem Bildschirm und an keinem
 Motorfader. Und alle Griffe auf denselben Crossfade zeigen **dieselbe Stellung**:
 schieben Sie ihn im Browser, fährt der Motorfader am X-Touch mit, und umgekehrt.
 Solange Sie den Motorfader anfassen, schreibt das Pult ihm nichts.
+
+### Ein Kopf, der einem Darsteller folgt
+
+Ein Tracking-System — **PSN** (PosiStageNet; openfollow.app ist eine Quelle
+davon) — sagt dem Pult, wo jeder Darsteller steht. Ein Moving Head kann auf
+einen von ihnen gerichtet werden, und eine Cue kann sagen *ab hier ist dieser
+Kopf auf ihr* und *ab hier nicht mehr*.
+
+**Einmal einrichten.** Die Netzseite — die Gruppe, die Schnittstelle, wo oben
+ist — gehört dem Installateur und steht im
+[Installationshandbuch](installer.de.md#13-tracker-psn). Danach am Pult:
+
+1. *Settings → Trackers*: **Listen for trackers** anhaken. Die Liste unten füllt
+   sich mit den Trackern, die das Pult hört, je mit ihrer Position **auf Ihrer
+   Bühne** und wie lange es her ist, dass sie zuletzt gesendet haben. Stellen
+   Sie den Darsteller an die vordere linke Ecke und lesen Sie die Zahlen ab: auf
+   sie werden die Köpfe gerichtet.
+2. *Viewer 3D*: die Köpfe auswählen (`Fixture 1 Thru 4`), unter **Follows →
+   Tracker** die Nummer des Trackers eintippen und **Set** drücken. Das **Y**
+   darunter ist, wie weit *über* dem Tracker gezielt wird — die Brust eines
+   Darstellers, der ihn am Gürtel trägt. Ein Strich (`-`) nimmt den Tracker
+   wieder weg. Es ist derselbe Befehl, der ein Fixture platziert, also **ein
+   Oops**.
+
+**Danach ist es ein Wert wie jeder andere.** Jeder Kopf, der sich ausrichten
+lässt — er hat Pan und Tilt — hat einen Wert **Follow**: der vierte Knopf der
+Bank *Position*, oder `Fixture 1 Follow At 100` auf der Zeile. Null überlässt
+Pan und Tilt den Cues und dem Programmer; voll richtet den Kopf auf seinen
+Tracker, was auch immer sie sagen; dazwischen ist ein Stück des Weges. Ein Kopf,
+dem man keinen Tracker gegeben hat, tut damit nichts.
+
+- **Eine Cue speichert ihn.** *Follow* auf voll in einer Cue heißt *ab hier ist
+  dieser Kopf auf seinem Tracker*, und es blendet über die Überblendzeit der Cue
+  ein — der Kopf gleitet zum Darsteller, statt zu springen. Es wird wie jeder
+  Wert weitergereicht.
+- **Eine Cue, die eine Position speichert, lässt den Kopf los.** Speichern Sie
+  Pan oder Tilt für einen Kopf, der gerade folgt, fährt er *in dieser Cue* an
+  diese Position: die Cue sagt, wohin er geht. Eine Cue, die *Follow* selbst
+  speichert, wird beim Wort genommen.
+- **Der Programmer gewinnt**, wie über jede Cue. Ein Pan oder Tilt, den Sie
+  halten, gehört Ihnen, und der Kopf folgt auf der anderen Achse; `Clear` gibt
+  ihn zurück.
+- **Ein Darsteller, der nicht mehr gehört wird, wird gehalten, nicht verloren.**
+  Sendet der Tracker eine halbe Sekunde nichts, bleibt der Kopf dort, wohin er
+  zuletzt zeigte, und das Pult sagt es einmal in der Meldungszeile — und einmal,
+  wenn er zurück ist. Nichts springt. *Settings → Trackers* listet jeden Tracker
+  mit der Zeit, die er schon still ist.
+- **Das stimmt nicht beim ersten Versuch von allein**: ein Tracking-System sagt
+  nicht, wo oben ist oder was eine Einheit ist, und ein Vorgabewert ist geraten.
+  Prüfen Sie die Zuordnung vor einer Show an einem Darsteller und der Liste — das
+  Installationshandbuch hat die Schritte.
 
 ---
 
@@ -985,7 +1049,10 @@ Hier genannt, statt von Ihnen entdeckt zu werden:
   Planerdatei gegengeprüft.
 - **Keine Web-Fernbedienung** — ein Telefon oder Tablet kann das Pult noch nicht
   fahren. Geplant.
-- **Kein Timecode, kein OSC, kein PSN.** Geplant.
+- **Kein Timecode, kein OSC.** Geplant. **PSN** — ein Tracking-System, das
+  Köpfe führt — ist gebaut und nur an simulierten Trackern gelaufen: welche
+  Achsen ein echtes System benutzt, hat noch niemand an einem echten Tracker
+  geprüft, und deshalb ist die Zuordnung Ihre Sache (Kapitel 8).
 - **Keine Effekt-Engine** — das Fenster *Phaser Editor* ist leer, weil das
   darunter fehlt.
 - **Autostart nur unter Windows.** Die Einstellung gibt es überall, der Eintrag

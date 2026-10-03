@@ -156,8 +156,16 @@ describe("the words a panel writes", () => {
   it("lists the panels in the order the window draws them", () => {
     // Four from S37 and S38's `Controls` beside `Devices`: that panel names the
     // desk's port and the file its table was read from, and this one is what the
-    // table says.
-    expect(PANELS).toEqual(["Outputs", "Devices", "Controls", "Show files", "This machine"]);
+    // table says. S32's `Trackers` comes after the surface and before the files:
+    // it is the other thing that arrives from outside.
+    expect(PANELS).toEqual([
+      "Outputs",
+      "Devices",
+      "Controls",
+      "Trackers",
+      "Show files",
+      "This machine",
+    ]);
   });
 });
 

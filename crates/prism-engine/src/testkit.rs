@@ -78,6 +78,22 @@ pub(crate) fn moving_head() -> FixtureType {
     )
 }
 
+/// A head that can be aimed - **S32**: a dimmer, a pan of +-270 degrees and a
+/// tilt of +-135, both homing centred, which is what the library's own moving
+/// heads state. Four 8-bit channels.
+pub(crate) fn aimable_head() -> FixtureType {
+    let mut pan = attribute_at(AttributeType::Pan, 32_768, 1, None);
+    pan.physical_from = -270.0;
+    pan.physical_to = 270.0;
+    let mut tilt = attribute_at(AttributeType::Tilt, 32_768, 2, None);
+    tilt.physical_from = -135.0;
+    tilt.physical_to = 135.0;
+    fixture_type(
+        "test.aimable",
+        vec![attribute_at(AttributeType::Dimmer, 0, 0, None), pan, tilt],
+    )
+}
+
 /// The same head patched 16-bit: dimmer on footprint channels 1-2, pan on 3-4.
 pub(crate) fn moving_head_16() -> FixtureType {
     sized_fixture_type(
@@ -140,6 +156,7 @@ pub(crate) fn fixture(id: u32, type_id: &str, universe: u32, address: u16) -> Fi
         // every index after it — so a helper that switched it on would quietly
         // make every test about addressing a test about two features.
         software_dimmer: false,
+        follow: None,
         id: FixtureId::new(id),
         name: format!("Fixture {id}"),
         type_id: type_id.to_owned(),

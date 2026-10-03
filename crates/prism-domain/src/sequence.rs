@@ -368,6 +368,48 @@ impl CueTrack {
             here.insert(key, (part.value, part.tracking));
         }
 
+        // **Storing a position lets a head go from its tracker** - S32.
+        //
+        // A head that is following (`AttributeType::Follow` above nought) is
+        // pointed at its tracker whatever the cues say about pan and tilt, so a
+        // cue that stored a pan or a tilt for it would be a position the head
+        // never went to. A cue that names a pan or a tilt and says nothing about
+        // following means *this is where it goes*, and that is what the rule
+        // makes it: the head's *Follow* is taken to nought **for the cue that
+        // says so**, tracking or cue-only as the position is.
+        //
+        // It is a rule of the *fold* and not a part written into the cue, so it
+        // is one rule for the engine, the query and a blocking cue (see this
+        // type's documentation) - and it costs nothing where nobody follows:
+        // it fires only for a head whose Follow the list is holding above
+        // nought.
+        let mut released: Vec<(CueKey, CueTracking)> = Vec::new();
+        for (key, (_, tracking)) in here.iter() {
+            if !matches!(key.1.attribute, AttributeType::Pan | AttributeType::Tilt)
+                || !key.1.is_first()
+            {
+                continue;
+            }
+            let follow = (key.0, AttributeKey::first(AttributeType::Follow));
+            if here.contains_key(&follow) || tracked.get(&follow).copied().unwrap_or(0) == 0 {
+                continue;
+            }
+            match released.iter_mut().find(|(held, _)| *held == follow) {
+                // One of the two is tracking, so the release is: a position
+                // that is handed on takes the following with it.
+                Some((_, kind)) => {
+                    if *tracking == CueTracking::Track {
+                        *kind = CueTracking::Track;
+                    }
+                }
+                None => released.push((follow, *tracking)),
+            }
+        }
+        for (key, tracking) in released {
+            touched.insert(key);
+            here.insert(key, (0, tracking));
+        }
+
         overlay.clear();
         for (key, (value, tracking)) in here.iter() {
             match tracking {
@@ -968,6 +1010,150 @@ mod tests {
                 AttributeKey::first(AttributeType::Dimmer),
             ))
             .copied()
+    }
+
+    fn part_of(
+        fixture: u32,
+        attribute: AttributeType,
+        value: u16,
+        tracking: CueTracking,
+    ) -> CuePart {
+        CuePart {
+            attribute,
+            ..valued(fixture, value, tracking)
+        }
+    }
+
+    fn follow_of(track: &CueTrack, fixture: u32) -> Option<u16> {
+        track
+            .visible()
+            .get(&(
+                FixtureId::new(fixture),
+                AttributeKey::first(AttributeType::Follow),
+            ))
+            .copied()
+    }
+
+    /// **S32.** A head that follows is let go by a cue that stores it a place.
+    #[test]
+    fn a_cue_that_stores_a_pan_or_a_tilt_lets_a_following_head_go() {
+        let mut track = CueTrack::new();
+        let mut changes = Vec::new();
+        track.enter(
+            &look(
+                "1",
+                vec![part_of(
+                    1,
+                    AttributeType::Follow,
+                    u16::MAX,
+                    CueTracking::Track,
+                )],
+            ),
+            &mut changes,
+        );
+        assert_eq!(follow_of(&track, 1), Some(u16::MAX));
+
+        // A cue about something else leaves the head following.
+        track.enter(
+            &look(
+                "2",
+                vec![part_of(1, AttributeType::Zoom, 100, CueTracking::Track)],
+            ),
+            &mut changes,
+        );
+        assert_eq!(follow_of(&track, 1), Some(u16::MAX));
+
+        // A tilt on its own is a place, and the head goes to it.
+        track.enter(
+            &look(
+                "3",
+                vec![part_of(1, AttributeType::Tilt, 9_000, CueTracking::Track)],
+            ),
+            &mut changes,
+        );
+        assert_eq!(follow_of(&track, 1), Some(0));
+        assert!(
+            changes
+                .iter()
+                .any(|change| change.attribute == AttributeType::Follow && change.value == Some(0)),
+            "the table the player reads says so: {changes:?}"
+        );
+    }
+
+    #[test]
+    fn a_cue_that_says_follow_itself_is_taken_at_its_word() {
+        let mut track = CueTrack::new();
+        let mut changes = Vec::new();
+        track.enter(
+            &look(
+                "1",
+                vec![part_of(
+                    1,
+                    AttributeType::Follow,
+                    u16::MAX,
+                    CueTracking::Track,
+                )],
+            ),
+            &mut changes,
+        );
+        // A pan **and** a Follow still on: the cue is saying both, and it means
+        // the second.
+        track.enter(
+            &look(
+                "2",
+                vec![
+                    part_of(1, AttributeType::Pan, 100, CueTracking::Track),
+                    part_of(1, AttributeType::Follow, 40_000, CueTracking::Track),
+                ],
+            ),
+            &mut changes,
+        );
+        assert_eq!(follow_of(&track, 1), Some(40_000));
+    }
+
+    #[test]
+    fn a_head_that_was_never_following_is_left_alone_by_a_position() {
+        let mut track = CueTrack::new();
+        let mut changes = Vec::new();
+        track.enter(
+            &look(
+                "1",
+                vec![part_of(1, AttributeType::Pan, 100, CueTracking::Track)],
+            ),
+            &mut changes,
+        );
+        assert_eq!(follow_of(&track, 1), None, "nothing is written for it");
+        assert_eq!(changes.len(), 1);
+    }
+
+    /// A one-off position is a one-off release: the head goes back to following
+    /// when the list leaves the cue.
+    #[test]
+    fn a_cue_only_position_lets_the_head_go_for_that_cue_alone() {
+        let mut track = CueTrack::new();
+        let mut changes = Vec::new();
+        track.enter(
+            &look(
+                "1",
+                vec![part_of(
+                    1,
+                    AttributeType::Follow,
+                    u16::MAX,
+                    CueTracking::Track,
+                )],
+            ),
+            &mut changes,
+        );
+        track.enter(
+            &look(
+                "2",
+                vec![part_of(1, AttributeType::Pan, 100, CueTracking::CueOnly)],
+            ),
+            &mut changes,
+        );
+        assert_eq!(follow_of(&track, 1), Some(0));
+        track.enter(&look("3", Vec::new()), &mut changes);
+        assert_eq!(follow_of(&track, 1), Some(u16::MAX));
     }
 
     /// The rule itself: what a cue does not name keeps what an earlier cue left.

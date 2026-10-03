@@ -122,6 +122,7 @@ fn write_show(path: &Path) {
     .expect("a one-channel dimmer is a fixture type");
     show.patch_fixture(Fixture {
         software_dimmer: true,
+        follow: None,
         id: FixtureId::new(1),
         name: "Dimmer 1".to_owned(),
         type_id: "generic.dimmer.dark".to_owned(),

@@ -120,7 +120,8 @@ impl TickBody for RampBody {
             | TickCommand::SetProgrammerValue { .. }
             | TickCommand::ClearProgrammerValue { .. }
             | TickCommand::ClearProgrammer
-            | TickCommand::AdoptBody => {}
+            | TickCommand::AdoptBody
+            | TickCommand::AdoptFollow => {}
         }
     }
 
@@ -361,6 +362,7 @@ fn patch(layout: &FrameLayout, fixture_type: &FixtureType, count: u32) -> Vec<Fi
     (0..count)
         .map(|index| Fixture {
             software_dimmer: true,
+            follow: None,
             id: FixtureId::new(index + 1),
             name: String::new(),
             type_id: fixture_type.id.clone(),
@@ -476,7 +478,10 @@ fn a_tick_running_the_merge_makes_no_allocator_call_either() {
     let layout = FrameLayout::new((1..=8).map(UniverseId::new)).unwrap();
     let body = merge_body(&layout, &head, 128, 8);
     let slots = body.plan().slot_count();
-    assert_eq!(slots, 128 * 6);
+    // Six attributes a head, and the *Follow* slot the desk gives every head that
+    // has both a pan and a tilt (S32) - which these do, being the first six
+    // attribute types.
+    assert_eq!(slots, 128 * 7);
 
     let mut publisher = FramePublisher::new(Arc::new(layout));
     let mut subscriber = publisher.subscribe();
@@ -532,8 +537,12 @@ fn a_tick_running_the_encoder_as_well_makes_no_allocator_call_either() {
     let layout = FrameLayout::new((1..=4).map(UniverseId::new)).unwrap();
     let body = merge_body(&layout, &head, 128, 8);
     let slots = body.plan().slot_count();
-    assert_eq!(slots, 128 * 6);
-    assert_eq!(body.channels().target_count(), slots);
+    // Six attributes a head, and the *Follow* slot the desk gives every head that
+    // has both a pan and a tilt (S32) - which these do, being the first six
+    // attribute types.
+    assert_eq!(slots, 128 * 7);
+    // Every slot but the 128 *Follow* ones writes a channel; those have none.
+    assert_eq!(body.channels().target_count(), slots - 128);
 
     let mut publisher = FramePublisher::new(Arc::new(layout));
     let mut subscriber = publisher.subscribe();
@@ -706,11 +715,12 @@ fn a_tick_resolving_the_tracking_state_makes_no_allocator_call_either() {
         .sum();
     println!(
         "tracking table entries across 8 lists: {table}, and {} cells in the grid",
-        4 * slots * 8
+        4 * (slots - 128) * 8
     );
     assert_eq!(
         table,
-        4 * slots * 8,
+        // Every slot but the 128 *Follow* slots, which no cue names (S32).
+        4 * (slots - 128) * 8,
         "every cue touches every slot here, so the table is the grid"
     );
 
@@ -791,7 +801,10 @@ fn a_tick_with_cues_and_running_fades_makes_no_allocator_call_either() {
     )
     .unwrap();
     let slots = body.plan().slot_count();
-    assert_eq!(slots, 128 * 6);
+    // Six attributes a head, and the *Follow* slot the desk gives every head that
+    // has both a pan and a tilt (S32) - which these do, being the first six
+    // attribute types.
+    assert_eq!(slots, 128 * 7);
     for executor in 1..=8u32 {
         body.load_sequence(
             SequenceId::new(executor),
@@ -882,7 +895,10 @@ fn a_tick_with_the_programmer_and_the_masters_makes_no_allocator_call_either() {
     )
     .unwrap();
     let slots = body.plan().slot_count();
-    assert_eq!(slots, 128 * 6);
+    // Six attributes a head, and the *Follow* slot the desk gives every head that
+    // has both a pan and a tilt (S32) - which these do, being the first six
+    // attribute types.
+    assert_eq!(slots, 128 * 7);
     for executor in 1..=8u32 {
         body.load_sequence(
             SequenceId::new(executor),
@@ -1112,5 +1128,108 @@ fn a_tick_publishing_its_playbacks_makes_no_allocator_call_either() {
     assert!(
         subscriber.frame().channels().iter().any(|&byte| byte != 0),
         "nothing reached the frame, so the measurement is meaningless"
+    );
+}
+
+/// **The twelfth path - S32.** A hundred and twenty-eight heads each following a
+/// tracker, with the trackers moving every tick, and the aim (a handful of
+/// trigonometric calls per head) computed on the tick.
+///
+/// The follow layer is the one piece of the pipeline that does arithmetic the
+/// others do not, and `prism_domain::aim` is written with no allocation in it -
+/// this counts that rather than trusting the reading. The table the tick reads is
+/// one atomic word per tracker, so the writer's `publish` is also made on this
+/// thread and is part of what is measured.
+#[test]
+fn a_tick_with_heads_following_trackers_makes_no_allocator_call_either() {
+    let head = fixture_type(6, false);
+    let layout = FrameLayout::new((1..=8).map(UniverseId::new)).unwrap();
+    let mut patched = patch(&layout, &head, 128);
+    for (index, fixture) in patched.iter_mut().enumerate() {
+        fixture.position = Vec3 {
+            x: (index % 16) as f64,
+            y: 6.0,
+            z: (index / 16) as f64,
+        };
+        fixture.follow = Some(prism_domain::FollowTarget {
+            tracker: (index % 8) as u16,
+            offset: Vec3 {
+                x: 0.0,
+                y: 0.4,
+                z: 0.0,
+            },
+        });
+    }
+    let mut body = MergeBody::for_patch(
+        &layout,
+        patched.iter().map(|fixture| (fixture, &head)),
+        (1..=8).map(SequenceId::new),
+    )
+    .unwrap();
+    let table = Arc::new(prism_engine::TrackerTable::new());
+    let layer = prism_engine::FollowLayer::build(
+        body.plan(),
+        patched.iter().map(|fixture| (fixture, &head)),
+        Arc::clone(&table),
+    );
+    body.set_follow(layer);
+    assert_eq!(body.follow().len(), 128, "every head follows a tracker");
+    // Follow at full for every head, held by the programmer so the path is on
+    // the tick every tick.
+    for fixture in &patched {
+        let slot = body
+            .plan()
+            .index_of(fixture.id, AttributeType::Follow.into())
+            .expect("a head with a pan and a tilt has a Follow slot");
+        assert!(body.programmer_mut().set(slot, u16::MAX));
+    }
+
+    let mut publisher = FramePublisher::new(Arc::new(layout));
+    let mut subscriber = publisher.subscribe();
+    let (_producer, consumer) = command_queue(256);
+    let mut engine = Engine::new(body, consumer, publisher);
+    let clock = ManualClock::new();
+
+    let mut cycle = |engine: &mut Engine<MergeBody>, index: u32| {
+        // The trackers walk about the stage between ticks, as a receiver thread's
+        // writes would land between them.
+        for tracker in 0..8u16 {
+            let phase = f64::from(index) * 0.05 + f64::from(tracker);
+            assert!(table.publish(
+                tracker,
+                Vec3 {
+                    x: 8.0 + 6.0 * phase.sin(),
+                    y: 0.0,
+                    z: 4.0 + 3.0 * phase.cos(),
+                }
+            ));
+        }
+        engine.run_ticks(&clock, 1);
+        subscriber.refresh();
+    };
+
+    for index in 0..200 {
+        cycle(&mut engine, index);
+    }
+    engine.reset_stats();
+    let before = engine.body().values().to_vec();
+
+    let calls = allocator_calls(|| {
+        for index in 0..1_000 {
+            cycle(&mut engine, 200 + index);
+        }
+    });
+
+    println!("allocator calls in 1000 ticks, 128 heads following 8 trackers: {calls}");
+    assert_eq!(
+        calls, 0,
+        "following a tracker called the allocator {calls} times"
+    );
+    assert_eq!(engine.stats().panics, 0);
+    assert_eq!(engine.stats().ticks, 1_000);
+    // And it was aiming rather than sitting at home, or the nought means nothing.
+    assert!(
+        engine.body().values() != before.as_slice(),
+        "the heads did not move, so the measurement is meaningless"
     );
 }

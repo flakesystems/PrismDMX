@@ -70,6 +70,7 @@ fn attribute(
 fn fixture(id: u32, universe: u32, address: u16) -> Fixture {
     Fixture {
         software_dimmer: true,
+        follow: None,
         id: FixtureId::new(id),
         name: format!("Fixture {id}"),
         type_id: "test.head".to_owned(),
@@ -315,10 +316,11 @@ fn a_second_adapter_on_the_other_universe_gets_its_own_bytes() {
     let (mut commands, consumer) = command_queue(16);
     let mut engine = Engine::new(body, consumer, publisher);
     let clock = ManualClock::new();
-    // Fixture 2's dimmer is slot 3: three attributes each, ordered by fixture.
+    // Fixture 2's dimmer is slot 4: three attributes each and the Follow slot
+    // the desk gives a head that can be aimed (S32), ordered by fixture.
     commands
         .push(TickCommand::SetProgrammerValue {
-            slot: 3,
+            slot: 4,
             value: 65_535,
         })
         .unwrap();

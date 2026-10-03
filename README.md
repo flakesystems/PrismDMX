@@ -73,7 +73,9 @@ Named here rather than discovered by you:
   model with every beam the output is making, gobos, prisms, blades and haze
   included, but no truss, set or walls from an MVR file and no shadows.
 - **No Web Remote** — a phone or tablet cannot drive the desk yet (planned).
-- **No timecode, OSC or PSN** (planned).
+- **No timecode or OSC** (planned). **PSN** — a tracking system pointing heads
+  at performers — is built and has only met simulated trackers: the axes a real
+  system uses are a setting, and the default is a guess.
 - **The desk does not follow a switching channel while the show runs.** The
   Open Fixture Library calls a channel whose meaning depends on another
   channel's value a *switching channel*. It is always reachable, and where every

@@ -80,6 +80,7 @@ fn head_type() -> FixtureType {
 fn hung(id: u32, type_id: &str, universe: u32, address: u16, x: f64) -> Fixture {
     Fixture {
         software_dimmer: true,
+        follow: None,
         id: FixtureId::new(id),
         name: format!("Head {id}"),
         type_id: type_id.to_owned(),

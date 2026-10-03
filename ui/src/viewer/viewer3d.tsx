@@ -50,7 +50,17 @@ import { graphics } from "./gl/graphics";
 import { Stage, webglAvailable } from "./gl/stage";
 import { ResourceCache } from "./resources";
 import type { PlaceFields } from "./place";
-import { fieldsAreNumbers, fieldsOf, placeSet, placeSpread, readField, selectedFixtures } from "./place";
+import {
+  MAX_TRACKER,
+  NO_TRACKER,
+  fieldsAreNumbers,
+  fieldsOf,
+  placeSet,
+  placeSpread,
+  readField,
+  selectedFixtures,
+  trackerIsValid,
+} from "./place";
 import type { RigFixture } from "./rig";
 import { rigOf } from "./rig";
 import type { ViewSurface } from "./surface";
@@ -407,6 +417,26 @@ function PlacePanel({
         {field("rx", "X", "Tips a hanging beam: 90 points it at the audience, 180 stands the fixture up")}
         {field("ry", "Y", "Turns it about the vertical, applied last")}
         {field("rz", "Z", "Rolls it about the depth axis, applied first")}
+      </fieldset>
+      <fieldset className="viewer-fields" data-testid="viewer-place-follow">
+        <legend>Follows</legend>
+        <label className="viewer-field" title="A PSN tracker number, 0 to 1023. Blank keeps what the fixture has; a dash takes the tracker away">
+          <span>Tracker</span>
+          <input
+            inputMode="numeric"
+            data-testid="viewer-place-tracker"
+            value={fields.tracker}
+            disabled={chosen.length === 0}
+            placeholder={`0–${String(MAX_TRACKER)} or ${NO_TRACKER}`}
+            aria-invalid={!trackerIsValid(fields.tracker)}
+            onChange={(event) => {
+              setFields({ ...fields, tracker: event.target.value });
+            }}
+          />
+        </label>
+        {field("ox", "X", "Aim this far across from the tracker, in metres")}
+        {field("oy", "Y", "Aim this far above the tracker, in metres: the chest of a performer whose tracker is at the belt")}
+        {field("oz", "Z", "Aim this far upstage of the tracker, in metres")}
       </fieldset>
       <fieldset className="viewer-fields">
         <legend>Spread</legend>

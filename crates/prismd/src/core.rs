@@ -205,6 +205,15 @@ pub struct Core {
     /// restarted into learn mode would be a desk whose keys do nothing. One
     /// shot, so the first control the surface reports clears it.
     learning: bool,
+    /// The tracker receiver, and the table it writes - S32.
+    ///
+    /// Held here for the reason the binding table is: what it listens to is a
+    /// machine setting a **command** edits, so it has to live where a command
+    /// arrives. The thread is its own; this is the handle.
+    tracking: crate::tracking::Tracking,
+    /// Followed trackers that have been reported quiet, so a tracker that stays
+    /// quiet is said once and one that comes back is said once - S32.
+    quiet_trackers: std::collections::BTreeSet<u16>,
     /// A binding table the surface has not been given yet — S38.
     ///
     /// [`Self::profile_change`]'s shape and its reason: the `SurfaceLink` that
@@ -273,7 +282,53 @@ impl Core {
             binding_revision: 0,
             learning: false,
             binding_change: None,
+            tracking: crate::tracking::Tracking::idle(),
+            quiet_trackers: std::collections::BTreeSet::new(),
         })
+    }
+
+    /// Gives this desk a tracker receiver - S32.
+    ///
+    /// The daemon gives it the real one (or `Tracking::disabled` under
+    /// `--mock-devices`) before anything runs; a **test** gives one to a daemon
+    /// that is already running, which is what lets the follow path be asserted
+    /// from a position on a socket to a pan on the frame. The receiver is
+    /// configured from this machine's settings on the way in, and the follow
+    /// layer is rebuilt over **its** table - the one table the tick will read.
+    pub fn adopt_tracking(&mut self, tracking: crate::tracking::Tracking) {
+        self.tracking = tracking;
+        self.tracking
+            .configure(&self.machine.config.settings().trackers);
+        self.refollow();
+    }
+
+    /// The tracker receiver - S32.
+    #[must_use]
+    pub const fn tracking(&self) -> &crate::tracking::Tracking {
+        &self.tracking
+    }
+
+    /// The follow layer for a plan: every head the show has given a tracker.
+    ///
+    /// Allocates - the core thread's work - and is built against the plan it is
+    /// handed, which is the plan of the body it will run in.
+    fn follow_for(&self, plan: &MergePlan) -> prism_engine::FollowLayer {
+        prism_engine::FollowLayer::build(
+            plan,
+            self.file.show.patched(),
+            Arc::clone(self.tracking.table()),
+        )
+    }
+
+    /// Rebuilds the follow layer alone and hands it to the tick - S32.
+    ///
+    /// **Not a rebuild of the body**, which would stop every playback: giving a
+    /// head a tracker changes what the follow layer knows and nothing about the
+    /// patch. See `crate::engine`'s module documentation.
+    fn refollow(&mut self) {
+        let layer = self.follow_for(&self.plan);
+        self.engine.install_follow(layer);
+        self.engine.collect_retired();
     }
 
     /// Keeps the GDTF Share account in `store` instead of the machine's own.
@@ -549,10 +604,15 @@ impl Core {
             )
         }) || self.patch_revision != self.file.show.patch_revision();
 
+        let refollow = effects.contains(&Effect::Refollow);
+
         for effect in &effects {
             match effect {
                 // Answered by the rebuild below.
                 Effect::Repatch | Effect::ReloadGroups | Effect::ReloadSequence(_) => {}
+                // S32's, answered after the loop - and by the rebuild, if there
+                // is one, which builds a follow layer of its own.
+                Effect::Refollow => {}
                 // **Playback state is the tick's to report, and only the
                 // tick's** (S34). Until the readback existed the daemon wrote
                 // `is_active` here on the way past, because nothing else could;
@@ -687,6 +747,8 @@ impl Core {
 
         if rebuild {
             self.rebuild()?;
+        } else if refollow {
+            self.refollow();
         }
         // After the rebuild, so a programmer command that arrived with a
         // repatch is translated against the plan it belongs to.
@@ -743,6 +805,7 @@ impl Core {
                 .map(|(user, _)| user),
             surface_profile: settings.surface_profile.clone(),
             jog_sensitivity: settings.jog_sensitivity,
+            trackers: settings.trackers.clone(),
             overrides: self.machine.overrides.clone(),
         }
     }
@@ -808,9 +871,13 @@ impl Core {
         self.exit_change = Some(self.machine.config.settings().exit_action);
         // …and one takes effect on the spot, because a log level is a switch.
         log::set_level(log::Level::from(self.machine.config.settings().log_level));
+        // And the tracker receiver is made to match: started, stopped or moved
+        // to another address, and left alone if nothing it reads changed - S32.
+        self.tracking
+            .configure(&self.machine.config.settings().trackers);
 
         let mut deltas = vec![Delta::MachineChanged {
-            settings: self.machine_settings(),
+            settings: Box::new(self.machine_settings()),
         }];
         deltas.extend(self.write_machine());
         deltas
@@ -1538,7 +1605,7 @@ impl Core {
             message,
         }];
         deltas.push(Delta::MachineChanged {
-            settings: self.machine_settings(),
+            settings: Box::new(self.machine_settings()),
         });
         deltas
     }
@@ -1626,6 +1693,129 @@ impl Core {
         }
     }
 
+    /// Says so, once, when a tracker that heads follow goes quiet - and once
+    /// when it comes back - S32.
+    ///
+    /// `ARCHITECTURE_SPEC.md` §8: on a timeout the last position is **held**, a
+    /// warning appears, and nothing jumps. The holding needs nothing from here -
+    /// the table keeps the last position - so this is only the warning. It is
+    /// kept to trackers some head is actually **following**: a tracker nobody
+    /// follows going quiet is not a fault in anybody's show, and a notice for
+    /// every wanderer who leaves the stage would be noise an operator learns to
+    /// stop reading.
+    pub fn poll_trackers(&mut self) -> Vec<Delta> {
+        let view = self.tracking.view();
+        let now = std::time::Instant::now();
+        let mut deltas = Vec::new();
+        let mut followed: BTreeMap<u16, u32> = BTreeMap::new();
+        for (fixture, _) in self.file.show.patched() {
+            if let Some(target) = fixture.follow {
+                *followed.entry(target.tracker).or_default() += 1;
+            }
+        }
+        // Only what the receiver is actually listening for can go quiet: a desk
+        // with the receiver switched off has nobody to be heard from, and its
+        // heads hold where they are for a reason a panel already says.
+        if view.listening {
+            for (&tracker, &heads) in &followed {
+                let heard = view.tracker(tracker);
+                let quiet = heard
+                    .is_none_or(|row| view.health(row, now) == prism_domain::TrackerHealth::Quiet);
+                let reported = self.quiet_trackers.contains(&tracker);
+                let name = heard
+                    .and_then(|row| row.name.as_deref())
+                    .map_or_else(String::new, |name| format!(" ({name})"));
+                // One head or several, and the verbs that go with it.
+                let (heads_text, follows, holds, is_left) = if heads == 1 {
+                    ("1 head".to_owned(), "follows", "holds", "is")
+                } else {
+                    (format!("{heads} heads"), "follow", "hold", "are")
+                };
+                if quiet && !reported {
+                    self.quiet_trackers.insert(tracker);
+                    let message = if heard.is_some_and(|row| row.last_seen.is_some()) {
+                        format!(
+                            "tracker {tracker}{name} has gone quiet - {heads_text} {holds} the \
+                             last position it sent"
+                        )
+                    } else {
+                        format!(
+                            "tracker {tracker} has not been heard - {heads_text} that {follows} \
+                             it {is_left} left to the cues"
+                        )
+                    };
+                    log::warn("tracking", &message);
+                    deltas.push(Delta::Notice {
+                        level: NoticeLevel::Warn,
+                        message,
+                    });
+                } else if !quiet && reported {
+                    self.quiet_trackers.remove(&tracker);
+                    let message = format!("tracker {tracker}{name} is back");
+                    log::info("tracking", &message);
+                    deltas.push(Delta::Notice {
+                        level: NoticeLevel::Info,
+                        message,
+                    });
+                }
+            }
+        }
+        // A head that no longer follows a tracker forgets that it was quiet, so
+        // the next time it is assigned the warning is not already spent.
+        self.quiet_trackers
+            .retain(|tracker| followed.contains_key(tracker));
+        deltas
+    }
+
+    /// What the tracker receiver has heard, and how many heads follow each - for
+    /// `Query::Trackers` - S32.
+    #[must_use]
+    pub fn trackers_answer(&self) -> prism_domain::Answer {
+        let view = self.tracking.view();
+        let now = std::time::Instant::now();
+        let mut followers: BTreeMap<u16, u32> = BTreeMap::new();
+        for (fixture, _) in self.file.show.patched() {
+            if let Some(target) = fixture.follow {
+                *followers.entry(target.tracker).or_default() += 1;
+            }
+        }
+        let mut trackers: Vec<prism_domain::SeenTracker> = view
+            .trackers
+            .iter()
+            .map(|row| prism_domain::SeenTracker {
+                id: row.id,
+                name: row.name.clone(),
+                position: row.position,
+                age_ms: row.last_seen.map_or(u64::MAX, |at| {
+                    u64::try_from(now.saturating_duration_since(at).as_millis()).unwrap_or(u64::MAX)
+                }),
+                health: view.health(row, now),
+                followers: followers.get(&row.id).copied().unwrap_or(0),
+            })
+            .collect();
+        // A tracker some head follows and the receiver has never heard is the
+        // row an installer is looking for.
+        for (&id, &heads) in &followers {
+            if !trackers.iter().any(|row| row.id == id) {
+                trackers.push(prism_domain::SeenTracker {
+                    id,
+                    name: None,
+                    position: prism_domain::Vec3::ZERO,
+                    age_ms: u64::MAX,
+                    health: prism_domain::TrackerHealth::Quiet,
+                    followers: heads,
+                });
+            }
+        }
+        trackers.sort_by_key(|row| row.id);
+        prism_domain::Answer::Trackers {
+            trackers,
+            listening: view.listening,
+            error: view.error,
+            rejected: view.counters.rejected,
+        }
+    }
+
     /// Loads a show file over the top of the running one.
     ///
     /// **A load is not a replay** (S15): `ShowStore::load` answers with
@@ -1672,6 +1862,11 @@ impl Core {
             }
         };
         self.masters.apply_to(&mut body, &self.file);
+        // **A rebuilt body has its follow layer built with it** - S32. The layer
+        // is built against the plan the body was, which is the plan the daemon is
+        // about to adopt below.
+        let follow = self.follow_for(body.plan());
+        body.set_follow(follow);
 
         self.plan = body.plan().clone();
         self.patch_revision = self.file.show.patch_revision();

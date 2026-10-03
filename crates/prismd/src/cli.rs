@@ -822,6 +822,7 @@ mod tests {
             // Not at its default either, for the reason nothing in this fixture
             // is: a value carried through cannot be told from one never read.
             jog_sensitivity: 150,
+            trackers: prism_domain::TrackerSettings::default(),
         };
         let resolved = resolve(&Options::default(), &settings, false, false);
         assert_eq!(

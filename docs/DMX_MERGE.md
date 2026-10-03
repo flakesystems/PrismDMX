@@ -18,6 +18,8 @@ Every attribute value is resolved through a fixed stack, evaluated bottom to top
 ├─────────────────────────────┤
 │  Programmer                 │  absolute override where a value exists
 ├─────────────────────────────┤
+│  Follow (heads on a tracker)│  mixes the aim into pan and tilt, by Follow (S32)
+├─────────────────────────────┤
 │  Playbacks (cue lists)      │  HTP for intensity, LTP for everything else
 ├─────────────────────────────┤
 │  Home / default values      │  always present, never empty
@@ -49,6 +51,8 @@ into an argument about one field.
 
 `prism_domain::PlaybackId` carries the whole of it and
 `prism_core::Show::playback_of` is where an executor becomes one.
+
+**Follow is a step, not a layer of sources** (S32). A head the show has given a tracker (`Fixture::follow`) and whose *Follow* value (`AttributeType::Follow`, a slot with no channel) is above nought has its pan and tilt **mixed** towards the aim at its tracker by that value — nought leaves what the playbacks resolved, full replaces it, between is part of the way (`prism_engine::FollowLayer::apply`, after the playbacks and before the programmer is applied). Three consequences, all of them the owner's: the **programmer wins** — a pan or a tilt it holds is left alone and its own *Follow* value counts; a cue **stores Follow like any value**, it tracks (§2.4), and fading it fades the head onto the performer; and a cue that stores a pan or a tilt for a head the list is holding at a Follow above nought **lets it go** for that cue (`prism_domain::CueTrack::enter` — in the fold, so the engine, the query and a blocking cue are one rule). A tracker nobody has heard leaves its heads to the cues; one that went quiet keeps its last position, and nothing jumps.
 
 **A flash is not a fourth layer** (S34). `ExecutorButtonFunction::Flash` raises the *master* of the cue list under the key for as long as it is held, and the master is applied inside the playback layer (§2.1) rather than above it — so a flashed playback still merges HTP against everything else, and a flash cannot take light away that another playback is providing. What makes it a flash rather than a fader move is that the **stored** master is never written to: `prism_engine::PlaybackSource` carries the held level beside the stored one, and releasing simply stops using it. A `SetExecutorMaster` that arrives *during* a flash therefore lands on the stored master and is what stands when the key comes up.
 
@@ -325,6 +329,8 @@ These are the properties `proptest` must verify. They are the contract of the me
 - With no active playbacks and an empty programmer, output equals home for every patched channel
 - Grand master at 0 forces every intensity attribute to 0 and leaves every non-intensity attribute unchanged
 - Grand master at full is a no-op
+- A pan or a tilt the programmer holds is output whatever a head's *Follow* is (S32, `follow.rs`: `what_the_programmer_holds_on_an_axis_is_not_overwritten`)
+- *Follow* at nought changes no value; at full it replaces pan and tilt with the aim; a tracker nobody has heard changes nothing; one that has gone quiet changes nothing either
 
 ### 6.4 Determinism and timing
 

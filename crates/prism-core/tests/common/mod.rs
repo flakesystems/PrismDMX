@@ -71,6 +71,7 @@ pub fn dimmer_type(id: &str, home: u16) -> FixtureType {
 pub fn fixture(id: u32, type_id: &str, universe: u32, address: u16) -> Fixture {
     Fixture {
         software_dimmer: true,
+        follow: None,
         id: FixtureId::new(id),
         name: format!("Fixture {id}"),
         type_id: type_id.to_owned(),
@@ -238,6 +239,7 @@ pub fn show_commands() -> Vec<Command> {
                 id: FixtureId::new(1),
                 position: Vec3::new(0.0, 6.0, 2.0),
                 rotation: Vec3::new(30.0, 0.0, 0.0),
+                follow: None,
             }],
         },
         Command::EmbedFixtureType {

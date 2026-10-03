@@ -48,9 +48,11 @@
 use core::fmt;
 use std::collections::VecDeque;
 use std::io;
-use std::net::{SocketAddr, UdpSocket};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
+
+use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 
 /// Why a datagram did not go out.
 ///
@@ -525,6 +527,30 @@ pub trait UdpNode: Send {
     /// The address this socket is listening on, once there is one.
     fn local_addr(&self) -> Option<SocketAddr>;
 
+    /// Opens a socket on `port` that has joined the multicast `group` - S32.
+    ///
+    /// What a PSN tracker receiver needs and Art-Net discovery never did: a
+    /// socket that **shares** its port. Every program on a lighting PC that wants
+    /// the tracker listens on the same one, so this asks for the address to be
+    /// reusable before it binds, then joins the group on `interface` - or on the
+    /// operating system's choice, if `None`.
+    ///
+    /// A default that refuses, so that a node that only ever sent and received
+    /// unicast does not have to say so.
+    ///
+    /// # Errors
+    ///
+    /// [`UdpError::Bind`] if the port or the group could not be taken.
+    fn listen_multicast(
+        &mut self,
+        group: Ipv4Addr,
+        port: u16,
+        interface: Option<Ipv4Addr>,
+    ) -> Result<(), UdpError> {
+        let _ = (group, port, interface);
+        Err(UdpError::Bind)
+    }
+
     /// Closes the socket. Infallible, for [`UdpSender::close`]'s reason.
     fn close(&mut self);
 }
@@ -549,6 +575,15 @@ impl<S: UdpNode + ?Sized> UdpNode for Box<S> {
 
     fn local_addr(&self) -> Option<SocketAddr> {
         (**self).local_addr()
+    }
+
+    fn listen_multicast(
+        &mut self,
+        group: Ipv4Addr,
+        port: u16,
+        interface: Option<Ipv4Addr>,
+    ) -> Result<(), UdpError> {
+        (**self).listen_multicast(group, port, interface)
     }
 
     fn close(&mut self) {
@@ -667,6 +702,38 @@ impl UdpNode for SystemUdpNode {
             .and_then(|socket| socket.local_addr().ok())
     }
 
+    fn listen_multicast(
+        &mut self,
+        group: Ipv4Addr,
+        port: u16,
+        interface: Option<Ipv4Addr>,
+    ) -> Result<(), UdpError> {
+        self.socket = None;
+        self.timeout = None;
+        let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
+            .map_err(|_| UdpError::Bind)?;
+        // **Shared before it is bound**, which is the whole reason this is not
+        // `UdpSocket::bind`: a second program on the same group is the ordinary
+        // case on a lighting PC, and without this it gets *address in use*.
+        socket.set_reuse_address(true).map_err(|_| UdpError::Bind)?;
+        // The BSDs (macOS among them) share a port between sockets only with
+        // `SO_REUSEPORT`; Windows and Linux do it with `SO_REUSEADDR` alone, and
+        // Windows has no such option to set.
+        #[cfg(unix)]
+        socket.set_reuse_port(true).map_err(|_| UdpError::Bind)?;
+        socket
+            .bind(&SockAddr::from(SocketAddrV4::new(
+                Ipv4Addr::UNSPECIFIED,
+                port,
+            )))
+            .map_err(|_| UdpError::Bind)?;
+        socket
+            .join_multicast_v4(&group, &interface.unwrap_or(Ipv4Addr::UNSPECIFIED))
+            .map_err(|_| UdpError::Bind)?;
+        self.socket = Some(socket.into());
+        Ok(())
+    }
+
     fn close(&mut self) {
         self.socket = None;
         self.timeout = None;
@@ -695,6 +762,7 @@ pub struct MockUdpNodeHandle {
 struct MockNodeState {
     sent: Vec<(SocketAddr, Vec<u8>)>,
     binds: Vec<(SocketAddr, bool)>,
+    joins: Vec<(Ipv4Addr, u16, Option<Ipv4Addr>)>,
     inbound: VecDeque<(SocketAddr, Vec<u8>)>,
     open: bool,
     closes: usize,
@@ -756,6 +824,12 @@ impl MockUdpNodeHandle {
     #[must_use]
     pub fn binds(&self) -> Vec<(SocketAddr, bool)> {
         lock(&self.state).binds.clone()
+    }
+
+    /// Every multicast listen: the group, the port and the interface asked for.
+    #[must_use]
+    pub fn joins(&self) -> Vec<(Ipv4Addr, u16, Option<Ipv4Addr>)> {
+        lock(&self.state).joins.clone()
     }
 
     /// Whether a socket is open.
@@ -855,6 +929,26 @@ impl UdpNode for MockUdpNode {
             slot.copy_from_slice(bytes);
         }
         Ok(Some((len, from)))
+    }
+
+    fn listen_multicast(
+        &mut self,
+        group: Ipv4Addr,
+        port: u16,
+        interface: Option<Ipv4Addr>,
+    ) -> Result<(), UdpError> {
+        let mut state = lock(&self.state);
+        state.joins.push((group, port, interface));
+        match state.bind_faults.pop_front() {
+            Some(error) => {
+                state.open = false;
+                Err(error)
+            }
+            None => {
+                state.open = true;
+                Ok(())
+            }
+        }
     }
 
     fn local_addr(&self) -> Option<SocketAddr> {

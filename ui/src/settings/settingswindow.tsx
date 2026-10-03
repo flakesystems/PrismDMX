@@ -42,6 +42,7 @@ import { OutputsPanel } from "./outputs";
 import type { Panel } from "./settings";
 import { PANELS } from "./settings";
 import { ShowFilesPanel } from "./showfiles";
+import { TrackersPanel } from "./trackers";
 
 /** The whole window. */
 export function SettingsWindow() {
@@ -68,6 +69,7 @@ export function SettingsWindow() {
         {panel === "Outputs" ? <OutputsPanel /> : null}
         {panel === "Devices" ? <DevicesPanel /> : null}
         {panel === "Controls" ? <ControlsPanel /> : null}
+        {panel === "Trackers" ? <TrackersPanel /> : null}
         {panel === "Show files" ? <ShowFilesPanel /> : null}
         {panel === "This machine" ? <MachinePanel /> : null}
       </div>

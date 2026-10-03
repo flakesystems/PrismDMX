@@ -950,6 +950,7 @@ mod tests {
         for (id, universe) in [(1u32, 1u32), (2, 7)] {
             show.patch_fixture(prism_domain::Fixture {
                 software_dimmer: true,
+                follow: None,
                 id: FixtureId::new(id),
                 name: format!("Par {id}"),
                 type_id: "generic.rgbw.par".to_owned(),

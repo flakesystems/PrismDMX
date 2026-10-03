@@ -139,6 +139,14 @@ pub enum MachineError {
     /// `docs/IPC_PROTOCOL.md` §2.1 exists to prevent. The remedy is one command
     /// — `MachineChange::NewToken` — and the message says so.
     NoTokenForNetwork(std::net::SocketAddr),
+    /// A tracker interface or group that is not an IPv4 address - S32.
+    BadTrackerAddress(String),
+    /// A tracker port of nought - S32.
+    BadTrackerPort,
+    /// A tracker scale that is not a positive number - S32.
+    BadTrackerScale,
+    /// A tracker offset that is not a number of a stage's size - S32.
+    BadTrackerOffset,
 }
 
 impl fmt::Display for MachineError {
@@ -212,6 +220,20 @@ impl fmt::Display for MachineError {
                 f,
                 "a desk carries between 1 and {} universes, not {universes}",
                 UniverseId::MAX
+            ),
+            Self::BadTrackerAddress(text) => {
+                write!(f, "\"{text}\" is not an IPv4 address, like 236.10.10.10")
+            }
+            Self::BadTrackerPort => write!(f, "a tracker port is between 1 and 65535"),
+            Self::BadTrackerScale => write!(
+                f,
+                "a tracker scale is metres per unit - 1 for metres, 0.001 for millimetres - \
+                 and has to be above nought"
+            ),
+            Self::BadTrackerOffset => write!(
+                f,
+                "a tracker offset is where the tracking system's origin is on this stage, \
+                 within a kilometre of the origin"
             ),
             Self::NoTokenForNetwork(address) => write!(
                 f,

@@ -178,6 +178,7 @@ fn desk_show() -> ShowFile {
     for (id, address) in [(1_u32, 1_u16), (2, 2), (3, 3), (4, 4)] {
         show.patch_fixture(Fixture {
             software_dimmer: true,
+            follow: None,
             id: FixtureId::new(id),
             name: format!("Dimmer {id}"),
             type_id: "generic.dimmer.dark".to_owned(),
@@ -192,6 +193,7 @@ fn desk_show() -> ShowFile {
     }
     show.patch_fixture(Fixture {
         software_dimmer: true,
+        follow: None,
         id: FixtureId::new(5),
         name: "Head 5".to_owned(),
         type_id: "generic.movinghead".to_owned(),
@@ -207,6 +209,7 @@ fn desk_show() -> ShowFile {
         // The bar makes its own light; the desk supplies no intensity for it,
         // so it stays dark at home like everything else in this rig.
         software_dimmer: true,
+        follow: None,
         id: FixtureId::new(6),
         name: "Bar 6".to_owned(),
         type_id: "generic.bar.2cell".to_owned(),

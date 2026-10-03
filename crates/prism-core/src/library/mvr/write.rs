@@ -277,16 +277,18 @@ pub(super) fn groups_of(text: &str) -> Option<Vec<[f64; 3]>> {
     (groups.len() >= 4).then_some(groups)
 }
 
-/// A number as an attribute value: nine places, no trailing noise, no `-0`.
+/// A number as an attribute value: twelve places, no trailing noise, no `-0`.
 ///
-/// Nine, because a rotation read back near the vertical divides by a cosine of
-/// a few hundredths and turns a rounding of the seventh place into a visible
-/// angle.
+/// Twelve, because a rotation read back near the vertical divides by a cosine
+/// and turns a rounding into an angle. Nine was enough for every fixture hung at
+/// a sensible tilt and not for one tipped to `90.0018` degrees, where the cosine
+/// is `3e-5` and the ninth place became an error of a thousandth of a degree -
+/// found by a proptest seed in S32, recorded in `proptest-regressions`.
 fn number(value: f64) -> String {
     if !value.is_finite() {
         return "0".to_owned();
     }
-    let text = format!("{value:.9}");
+    let text = format!("{value:.12}");
     let text = text.trim_end_matches('0').trim_end_matches('.');
     match text {
         "" | "-0" => "0".to_owned(),

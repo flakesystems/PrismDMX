@@ -417,7 +417,7 @@
         <ul>
           <li>Der 3D-Visualizer zeichnet das Rig, nicht den Saal — keine Traversen und Kulissen aus MVR</li>
           <li>Kein Web-Remote — Handy und Tablet steuern noch nicht <em>(geplant)</em></li>
-          <li>Kein Timecode, kein OSC, kein PSN <em>(geplant)</em></li>
+          <li>Kein Timecode, kein OSC <em>(geplant)</em> — PSN ist gebaut, aber nur an simulierten Trackern geprüft</li>
           <li>Das Pult folgt einem Switching-Kanal nicht im laufenden Betrieb</li>
           <li>Executor-Beschriftungen folgen nicht in jedem Fall einem Showwechsel</li>
           <li>Autostart nur unter Windows</li>
@@ -472,11 +472,12 @@
       <li class="stop reveal">
         <span class="stop-tag">S32</span>
         <h3>PSN &amp; OSC</h3>
-        <p>Tracker-Positionen aus PSN steuern Pan und Tilt durch die 3D-Rechnung;
-        OSC rein und raus. Fällt ein Tracker aus, hält die letzte Position — mit
-        Warnung und <em>ohne</em> Sprung. OSC ist außerdem eine Bedienfläche: eine
-        OSC-Nachricht auf ein Kommando zu legen, geht durch den Control-Editor und
-        nicht durch ein zweites Mapping-System.</p>
+        <p><strong>PSN ist gebaut:</strong> Tracker-Positionen steuern Pan und Tilt
+        durch die 3D-Rechnung, ein Cue speichert den Wert <em>Follow</em>, und fällt
+        ein Tracker aus, hält die letzte Position — mit Warnung und <em>ohne</em>
+        Sprung. <strong>OSC folgt</strong>, rein und raus; OSC ist außerdem eine
+        Bedienfläche: eine OSC-Nachricht auf ein Kommando zu legen, geht durch den
+        Control-Editor und nicht durch ein zweites Mapping-System.</p>
       </li>
 
       <li class="stop reveal">

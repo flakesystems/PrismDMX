@@ -128,6 +128,22 @@ pub struct Fixture {
     /// this field on its own never is.
     #[serde(default = "supplied")]
     pub software_dimmer: bool,
+    /// **The tracker this head follows, if it follows one** — S32.
+    ///
+    /// `None` is every fixture a show had before PSN, and the only thing it
+    /// costs is that the head's *Follow* value (`AttributeType::Follow`) has
+    /// nothing to follow: it is there, and it moves nothing. A show file
+    /// written by 0.9.3 opens with every fixture exactly as it was, because the
+    /// field is absent rather than migrated, and one that never assigns a
+    /// tracker serialises back byte for byte.
+    ///
+    /// It is a fact about the **production** and so it is in the show, with
+    /// `position` and `rotation` which it is aimed from; the tracking system
+    /// itself — which network, which axes — belongs to the *machine*
+    /// (`MachineSettings::trackers`), and a show carried to another hall keeps
+    /// its assignments and meets that hall's trackers by number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub follow: Option<crate::FollowTarget>,
 }
 
 /// The default for [`Fixture::software_dimmer`]: a fixture that needs one gets
@@ -223,11 +239,45 @@ pub struct Group {
 
 #[cfg(test)]
 mod tests {
+
+    /// **S32: an absent field is the migration.** A fixture written before PSN has
+    /// no `follow`, reads as one that follows nothing, and one that follows
+    /// nothing writes no `follow` back - so a show that never assigns a tracker
+    /// serialises byte for byte as it did.
+    #[test]
+    fn a_fixture_with_no_tracker_neither_reads_nor_writes_one() {
+        let plain = fixture();
+        let json = serde_json::to_value(&plain).unwrap();
+        assert!(json.get("follow").is_none(), "{json}");
+        let back: Fixture = serde_json::from_value(json).unwrap();
+        assert_eq!(back.follow, None);
+    }
+
+    #[test]
+    fn a_tracker_to_follow_round_trips_with_its_offset() {
+        let mut following = fixture();
+        following.follow = Some(crate::FollowTarget {
+            tracker: 17,
+            offset: Vec3 {
+                x: 0.0,
+                y: 0.4,
+                z: -0.25,
+            },
+        });
+        let json = serde_json::to_value(&following).unwrap();
+        assert_eq!(json["follow"]["tracker"], 17);
+        assert_eq!(json["follow"]["offset"]["y"], 0.4);
+        let back: Fixture = serde_json::from_value(json).unwrap();
+        assert_eq!(back, following);
+        let bytes = rmp_serde::to_vec_named(&following).unwrap();
+        assert_eq!(rmp_serde::from_slice::<Fixture>(&bytes).unwrap(), following);
+    }
     use crate::{Fixture, FixtureId, Group, GroupId, RgbColor, UniverseId, Vec3};
 
     fn fixture() -> Fixture {
         Fixture {
             software_dimmer: true,
+            follow: None,
             id: FixtureId::new(1),
             name: "Front left".to_owned(),
             type_id: "generic.rgbw.par".to_owned(),

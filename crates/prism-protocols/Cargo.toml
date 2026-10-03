@@ -13,6 +13,13 @@ prism-domain = { path = "../prism-domain" }
 # `FrameLayout` and the `Clock` a driver thread paces itself against.
 prism-engine = { path = "../prism-engine" }
 
+# **A socket that can share a multicast port** - S32. `std::net::UdpSocket`
+# cannot set `SO_REUSEADDR` before it binds, and a PSN tracker's group is one
+# that every program on a lighting PC wants to hear at once: a visualiser, a
+# media server and this desk, all on 56565. Already in the lockfile through the
+# async runtime, so it adds no new code to the build.
+socket2 = { version = "0.6", features = ["all"] }
+
 # The two Windows access paths of ARCHITECTURE_SPEC.md §7.1, and the only
 # platform-specific dependencies in the workspace. Declared per target so the
 # Linux test job and the ARM64 cross-check never see them: everything above

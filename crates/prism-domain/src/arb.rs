@@ -144,6 +144,17 @@ pub fn a_control() -> BoxedStrategy<crate::BoundControl> {
         .boxed()
 }
 
+/// A tracker setting, through a **boxed** strategy - S32.
+///
+/// `MachineChange::Tracker` is inside the subtree `a_control` and `an_action`
+/// already narrow, and for the same reason: eight variants' worth of union slots
+/// inline is about five kilobytes of value tree on a test thread's stack. Boxed,
+/// the whole of it is one pointer, and nothing about what can be generated is
+/// narrowed - the derive still walks every variant.
+pub fn a_tracker_change() -> BoxedStrategy<crate::TrackerChange> {
+    any::<crate::TrackerChange>().boxed()
+}
+
 /// One thing a control can be made to do, or nothing.
 ///
 /// **Narrowed on purpose, and this is the trade.** `SurfaceAction` is seventeen

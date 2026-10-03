@@ -14,11 +14,16 @@
  *   the `X` typed (or on nought) and the spacing apart. `Fixture 1 Thru 8`,
  *   *Spread*, is a truss of eight hung in one gesture.
  *
+ * **A place carries the tracker too** (S32): where a head hangs and what it is
+ * aimed at from there are one fact about it, so one command and one Oops. A
+ * tracker field left blank keeps the fixture's own, which is what makes a drag
+ * of a following head leave it following.
+ *
  * Nothing here checks what the daemon checks: a place off the stage or a
  * fixture that has gone is refused there, by name, and the line says so.
  */
 
-import type { FixturePlace } from "../bindings";
+import type { FixturePlace, FollowTarget } from "../bindings";
 import type { RigFixture } from "./rig";
 import type { V3 } from "./space";
 
@@ -35,10 +40,37 @@ export interface PlaceFields {
   readonly rz: string;
   /** How far apart a spread puts them, in metres. */
   readonly spacing: string;
+  /**
+   * The tracker a head follows - **S32**. A tracker number; blank *keeps* what
+   * the fixture has, and {@link NO_TRACKER} takes it away.
+   */
+  readonly tracker: string;
+  /** Where on the performer to aim, in metres added to the tracker's position. */
+  readonly ox: string;
+  readonly oy: string;
+  readonly oz: string;
 }
 
 /** Every field blank. */
-export const BLANK: PlaceFields = { x: "", y: "", z: "", rx: "", ry: "", rz: "", spacing: "" };
+export const BLANK: PlaceFields = {
+  x: "",
+  y: "",
+  z: "",
+  rx: "",
+  ry: "",
+  rz: "",
+  spacing: "",
+  tracker: "",
+  ox: "",
+  oy: "",
+  oz: "",
+};
+
+/** What is typed into the tracker field to take a tracker away. */
+export const NO_TRACKER = "-";
+
+/** The most trackers there are, as `prism_domain::MAX_TRACKER` says. */
+export const MAX_TRACKER = 1023;
 
 /** How far apart a spread puts fixtures when no spacing is typed, in metres. */
 export const DEFAULT_SPACING = 1;
@@ -59,7 +91,21 @@ export function readField(text: string): number | null {
 
 /** Whether every field is blank or a number. */
 export function fieldsAreNumbers(fields: PlaceFields): boolean {
-  return Object.values(fields).every((text) => !Number.isNaN(readField(text) ?? 0));
+  const { tracker, ...numbers } = fields;
+  return Object.values(numbers).every((text) => !Number.isNaN(readField(text) ?? 0)) && trackerIsValid(tracker);
+}
+
+/**
+ * Whether the tracker field is something the daemon will take: blank, the
+ * *none* sign, or a whole number from nought to {@link MAX_TRACKER}.
+ */
+export function trackerIsValid(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed === "" || trimmed === NO_TRACKER) {
+    return true;
+  }
+  const value = Number(trimmed);
+  return Number.isInteger(value) && value >= 0 && value <= MAX_TRACKER;
 }
 
 /** The fields for one fixture as it hangs, so the form starts from the truth. */
@@ -76,6 +122,10 @@ export function fieldsOf(fixture: RigFixture | undefined): PlaceFields {
     ry: text(fixture.rotation.y),
     rz: text(fixture.rotation.z),
     spacing: "",
+    tracker: fixture.follow === null ? "" : String(fixture.follow.tracker),
+    ox: fixture.follow === null ? "" : text(fixture.follow.offset.x),
+    oy: fixture.follow === null ? "" : text(fixture.follow.offset.y),
+    oz: fixture.follow === null ? "" : text(fixture.follow.offset.z),
   };
 }
 
@@ -100,14 +150,44 @@ function merged(own: V3, x: number | null, y: number | null, z: number | null): 
   return { x: x ?? own.x, y: y ?? own.y, z: z ?? own.z };
 }
 
+/**
+ * The tracker a fixture has after a gesture: its own where the tracker field is
+ * blank, none where it says {@link NO_TRACKER}, and the typed number - with the
+ * typed offset over the fixture's own - otherwise. A fixture that follows
+ * nothing and is given only an offset is still following nothing: an offset is
+ * a part of a performer, and there is no performer.
+ */
+function followAfter(fixture: RigFixture, fields: PlaceFields): FollowTarget | null {
+  const typed = fields.tracker.trim();
+  if (typed === NO_TRACKER) {
+    return null;
+  }
+  const own = fixture.follow;
+  const tracker = typed === "" ? (own?.tracker ?? null) : Number(typed);
+  if (tracker === null) {
+    return null;
+  }
+  const [ox, oy, oz] = [fields.ox, fields.oy, fields.oz].map(readField);
+  return {
+    tracker,
+    offset: merged(own?.offset ?? { x: 0, y: 0, z: 0 }, ox ?? null, oy ?? null, oz ?? null),
+  };
+}
+
 /** *Set*: every fixture at the typed numbers, blanks kept. */
 export function placeSet(fixtures: readonly RigFixture[], fields: PlaceFields): FixturePlace[] {
   const [x, y, z, rx, ry, rz] = [fields.x, fields.y, fields.z, fields.rx, fields.ry, fields.rz].map(readField);
-  return fixtures.map((fixture) => ({
-    id: fixture.id,
-    position: merged(fixture.position, x ?? null, y ?? null, z ?? null),
-    rotation: merged(fixture.rotation, rx ?? null, ry ?? null, rz ?? null),
-  }));
+  return fixtures.map((fixture) => {
+    const follow = followAfter(fixture, fields);
+    return {
+      id: fixture.id,
+      position: merged(fixture.position, x ?? null, y ?? null, z ?? null),
+      rotation: merged(fixture.rotation, rx ?? null, ry ?? null, rz ?? null),
+      // Absent is *no tracker*, which is what the daemon reads it as - so a
+      // fixture that follows nothing sends the place it always sent.
+      ...(follow === null ? {} : { follow }),
+    };
+  });
 }
 
 /**

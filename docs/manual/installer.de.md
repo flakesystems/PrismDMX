@@ -23,6 +23,7 @@ auf der Kommandozeile heißt, steht englisch da, wo es englisch ist.
 10. [Der Rechner ohne Bildschirm, und der Raspberry Pi](#10-der-rechner-ohne-bildschirm-und-der-raspberry-pi)
 11. [Abnahme: was Sie prüfen, bevor Sie gehen](#11-abnahme-was-sie-prüfen-bevor-sie-gehen)
 12. [Fehlersuche](#12-fehlersuche)
+13. [Tracker (PSN)](#13-tracker-psn)
 
 ---
 
@@ -463,6 +464,7 @@ gefragt wird, wenn etwas gemeldet wird.
 | Das Programm startet, aber kein Fenster | Ein Pult läuft schon, und sein Zuhörer ist aus. Die Meldung sagt, welcher Prozess das Pult hält, wo er zu erreichen sein wollte und über welches Datenverzeichnis die beiden streiten |
 | Das Fenster ist weiß | Die WebView2-Laufzeit fehlt (Kapitel 2) |
 | Fixture-Bibliothek leer | `profiles\fixtures` neben dem Programm. Installieren mit `tools\fetch-fixtures\fetch-fixtures.ps1`; das Skript nimmt entweder einen Ordner mit `.gdtf`-Dateien (`PRISMDMX_GDTF_SOURCE`) oder ein kostenloses Konto bei <https://gdtf-share.com> (`PRISMDMX_GDTF_USER` und `PRISMDMX_GDTF_PASSWORD`). Dieser Dienst hat keinen anonymen Massen-Download, darum fragt es. Das Pult startet so oder so, mit vier eingebauten Profilen, und sagt es im Log |
+| Ein Tracker „sendet“ und wird nie angezeigt | *Settings → Trackers*: die Statuszeile sagt, ob der Empfänger offen ist und warum nicht; die Zahl der Datagramme, die kein PSN Version 2 waren, sagt, ob etwas anderes auf der Gruppe liegt. Danach die Schnittstelle (Kapitel 13) und die UDP-Regel der Firewall |
 | Die Bibliothek ist da, aber in 3D wird nichts gezeichnet | Das Log sagt, wie viele der Profile GDTF sind. Eine vor Version 0.9.3 installierte Bibliothek sind Daten der Open Fixture Library: die richtigen Kanäle in der richtigen Reihenfolge, und keine Gobo-Bilder, keine Modelle, keine Beam-Geometrie. Das Installationsskript erneut ausführen |
 
 **Das Protokoll** liegt in `%APPDATA%\PrismDMX`. Vor einem reproduzierbaren
@@ -472,6 +474,80 @@ Fehler die Stufe in *Settings → This machine* auf `debug` stellen.
 [github.com/flakesystems/PrismDMX/issues](https://github.com/flakesystems/PrismDMX/issues).
 Für einen Fehler an Ausgängen, Netz oder Bedienpult gehört `machine.json` dazu —
 **vorher lesen**, sie enthält das Token dieses Pults, falls eines gesetzt ist.
+
+---
+
+## 13. Tracker (PSN)
+
+Für ein Haus mit Tracking-System — openfollow.app oder alles, was
+**PosiStageNet** spricht — kann das Pult einen Moving Head auf einen Darsteller
+richten (*Betriebshandbuch*, Kapitel 8). Dieses Kapitel ist der Teil, der dem
+Installateur gehört: das Netz, und wo oben ist.
+
+### Ist es an, und wo hört es zu
+
+*Settings → Trackers → Receiver*. Es ist **aus**, bis jemand *Listen for
+trackers* anhakt: ein Pult, das einen Multicast-Socket öffnet, den niemand
+verlangt hat, überrascht eine Firewall.
+
+| Einstellung | Was Sie wissen müssen |
+|---|---|
+| **Group** | `236.10.10.10`, wohin PSN-Systeme senden, wenn man ihnen nichts anderes sagt. Eine Adresse, die **keine** Multicast-Gruppe ist, wird direkt abgehört — ein Tracker, der nur an diesen Rechner sendet |
+| **Port** | `56565`. Das Pult teilt ihn: ein Visualizer oder ein Media-Server auf demselben Rechner hört dieselben Pakete |
+| **Interface** | Die Adresse der Netzwerkkarte, auf der zugehört wird. **Ein Laptop mit WLAN und Lichtnetz ist genau dort, wo die Wahl des Systems falsch ist** — nennen Sie die Adresse der Lichtkarte (`192.168.1.20`) und lassen Sie das Feld nur auf einem Rechner mit einem Netz leer |
+| **Quiet after, ms** | Wie lange ein Tracker nichts senden darf, bevor das Pult es sagt (standardmäßig 500). Es entscheidet, wann der Bediener **informiert** wird, nicht, was der Kopf tut: der Kopf eines stillen Trackers wird gehalten, wo er war |
+
+Die Statuszeile unter *Heard* sagt, ob der Empfänger offen ist und, wenn nicht,
+**warum** — ein anderes Programm hält den Port, ohne ihn zu teilen, eine
+Schnittstelle ist nicht an diesem Rechner. Daneben steht, wie viele Datagramme
+angekommen sind, die kein PSN Version 2 waren: ein Tracking-System, das „sendet“
+und nie gesehen wird, ist in neun von zehn Fällen diese Zahl, die hochzählt (ein
+anderes Protokoll, PSN Version 1 oder ein anderes System auf derselben Gruppe).
+
+**Die Firewall** muss dieses Programm auf **UDP** hereinlassen, auf dem Profil des
+Lichtnetzes — dieselbe Regel, die Kapitel 5 für Art-Net-Antworten beschreibt. Eine
+Multicast-Gruppe braucht außerdem einen Switch, der sie weiterleitet: bei
+eingeschaltetem IGMP-Snooping vergisst ein Switch ohne Querier einen Zuhörer nach
+ein paar Minuten.
+
+### Wo oben ist
+
+PSN liefert drei Zahlen und **sagt nicht**, welche Achse oben ist oder was eine
+Einheit ist, und Tracking-Systeme unterscheiden sich. Also fragt das Pult, in
+*Settings → Trackers → Axes*: für jede Achse der Bühne — **X quer**, **Y oben**,
+**Z nach hinten** — aus welcher Achse des Trackers sie gelesen wird und ob sie
+andersherum läuft; dann *Meter pro Einheit* (`1` für Meter, `0.001` für
+Millimeter) und wo der **Ursprung** des Tracking-Systems auf der Bühne liegt.
+
+Der Vorgabewert liest einen rechtshändigen Tracking-Raum mit *z* oben und *y* nach
+hinten, in Metern. **Das ist geraten**, das Einzige in diesem Kapitel, das noch
+niemand an einem echten Tracker bestätigt hat. Prüfen Sie es einmal, das dauert
+eine Minute:
+
+1. Den Empfänger einschalten und einen Darsteller einen Tracker tragen lassen.
+2. Ihn an die **vordere linke Ecke** der Bühne stellen, auf den Boden. Die Liste
+   unter *Heard* lesen: *X* sollte die Quer-Koordinate der Ecke sein, *Y* nahe
+   null (der Boden), *Z* ihre Tiefe. Ein Schritt nach hinten sollte *Z* erhöhen;
+   erhöht er *Y*, sind *Y* und *Z* vertauscht.
+3. Achsen, Maßstab und Ursprung berichtigen, bis die drei Zahlen dort sind, wo der
+   Darsteller steht.
+4. Einem Kopf den Tracker geben (*Viewer 3D → Follows*), sein *Follow* aus dem
+   Programmer auf voll setzen, und gehen. Der Kopf sollte auf die Brust des
+   Darstellers zeigen, nicht auf den Boden und nicht über den Kopf — das *Y* unter
+   *Follows* ist die Korrektur.
+
+### Was Sie vor dem Gehen prüfen
+
+Zu Kapitel 11 kommt dazu: **der Kopf folgt**. Ein gehörter Tracker, ein Kopf darauf,
+ein Gang von einer Bühnenseite zur anderen, und der Kopf folgt, ohne den langen
+Weg herum zu schwenken. Dann das Tracking-System abstecken: innerhalb der *Quiet
+after*-Zeit wird der Bediener einmal informiert, und **der Kopf bleibt, wo er
+war** — nichts springt. Wieder einstecken: der Kopf fährt dorthin, wo der Darsteller
+jetzt steht, und der Bediener erfährt, dass er zurück ist.
+
+> Die Zuordnung ist **nur an simulierten Trackern geprüft**;
+> `ARCHITECTURE_SPEC.md` §14 führt ein echtes Tracking-System als Zeile, die
+> niemand geschlossen hat. Eine Abnahme mit einem ist der Beitrag, der sie schließt.
 
 ---
 

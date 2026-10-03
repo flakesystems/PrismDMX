@@ -112,7 +112,7 @@ flowchart TB
 | `out-opendmx-*` | High | Break/MAB plus 513-byte frame per adapter; reconnect backoff | the engine |
 | `out-artnet`, `out-sacn` | High | Read latest frame, send at own cadence | the engine |
 | `midi-in` / `midi-out` | Normal | MCU codec; feedback coalescing at 30 Hz | the engine |
-| `psn-osc-in` | Normal | Tracker positions into a ring buffer (latest value only) | the engine |
+| `psn-in` (S32; `osc-in` is S32b) | Normal | Tracker positions into a table of one atomic word per tracker (latest value only) | the engine |
 | `core-main` (async, tokio) | Normal | IPC server, show model, session state, persistence, Web Remote | — |
 
 ### 3.1 Hard rules for `engine-tick`
@@ -435,7 +435,7 @@ flowchart LR
     H --> I["9 Telemetry snapshot (throttled)"]
 ```
 
-Merge semantics, the priority stack and the invariants that must hold under test are specified in [`docs/DMX_MERGE.md`](docs/DMX_MERGE.md). In brief: intensity merges **HTP**, everything else merges **LTP** by activation order, the programmer overrides all playbacks, and the stack from bottom to top is `Home → Playbacks → Programmer → Grand Master`.
+Merge semantics, the priority stack and the invariants that must hold under test are specified in [`docs/DMX_MERGE.md`](docs/DMX_MERGE.md). In brief: intensity merges **HTP**, everything else merges **LTP** by activation order, the programmer overrides all playbacks, and the stack from bottom to top is `Home → Playbacks → Programmer → Grand Master`. Since S32 a **follow** step sits between the playbacks and the programmer (§8): heads that have been given a tracker have their pan and tilt mixed towards where it is, by their *Follow* value, and the programmer still wins.
 
 ---
 
@@ -487,7 +487,12 @@ type AttributeType =
   | "Frost" | "Blade" | "BeamPosition" | "Fog" | "Speed" | "Sound"
   | "WarmWhite" | "ColdWhite"
   | "ColorWheelRotation" | "Haze" | "BladeRotation" | "BladeSystem"
-  | "Raw";
+  | "Raw"
+  | "Follow";   // S32: how far a head follows its tracker. A value with no
+                // channel and in no profile — the merge plan gives it to every
+                // fixture with a pan and a tilt, as it gives a software dimmer to
+                // one with no intensity (S43). A fraction: 0 leaves pan and tilt
+                // to the cues, 65535 puts the head on its tracker
 
 // **An attribute is a type and an occurrence** — S52, and this is the key every
 // value in a show is filed under. Until S52 the type alone was the key, and a
@@ -574,6 +579,12 @@ interface Fixture {
   // a rotation in degrees applied Z, then X, then Y (Ry · Rx · Rz). The one
   // definition is prism_domain::placement, and a recording holds the viewer to it.
   invertPan: boolean; invertTilt: boolean;
+  follow?: FollowTarget;       // S32: the PSN tracker this head follows, or absent.
+                               // { tracker: 0..=1023, offset: Vec3 } — the offset
+                               // is added to the tracker's position, in metres of
+                               // show space, to aim at the chest and not the belt.
+                               // Show data, so it travels with the file; absent on
+                               // every fixture a show had before PSN
 }
 
 interface Group { id: GroupId; name: string; fixtures: FixtureId[]; }
@@ -927,9 +938,23 @@ Enttec USB Pro protocol over VCP. It uses the same `DmxOutput` boundary and is p
 
 ## 8. Incoming position data (PSN / OSC — openfollow.app)
 
-Trackers send at their own rate (typically 30–60 Hz), asynchronously to the tick. A receiver thread writes into a ring buffer; the tick reads **only the latest** value — stale positions are worthless, so nothing is queued. Fixtures with a follow assignment compute pan and tilt from tracker position combined with fixture position and rotation in 3D space. **What position and rotation mean is settled since S30** — `prism_domain::placement` — and the viewer's yoke (`ui/src/viewer/space.ts::yoke`, pan about the fixture's vertical, then tilt about the yoke's across axis) is the forward half of the calculation this section will need backwards.
+**PSN is built (S32); OSC is S32b.** What follows is what exists.
 
-On packet timeout (500 ms) the last position is **held**, a warning appears in the UI, and nothing jumps.
+Trackers send at their own rate (typically 30–60 Hz), asynchronously to the tick. A receiver thread (`psn-in`, `prismd::tracking`) decodes each datagram (`prism_protocols::psn`, PosiStageNet v2: chunks, little-endian, `0x6755` data and `0x6756` info packets), **maps** the position into show space and writes it to a `prism_engine::TrackerTable` — **one atomic word per tracker**, three signed 21-bit counts of millimetres. The tick reads **only the latest** value of each tracker: stale positions are worthless, so nothing is queued, and a tracker that sends a hundred times between two ticks costs the tick one read.
+
+**What a head does with one.** A fixture the show has given a tracker (`Fixture::follow`: a tracker number and an offset in metres) and whose **Follow** value (`AttributeType::Follow`, a desk-supplied slot with no channel, a fraction `0..=65535`) is above nought is pointed at where that tracker is, **through the 3D calculation**: `prism_domain::aim` is the way back from the viewer's yoke (`ui/src/viewer/space.ts::yoke`, pan about the fixture's vertical, then tilt about the yoke's across axis) — given the fixture's position and orientation (`prism_domain::placement`), a point in show space and the travel of both axes, it answers the pan and tilt that put the beam through the point, **choosing the way nearest to where the head already points** so that a performer crossing the line behind it does not spin it the long way round. The aim is **mixed** into the pan and tilt the playbacks resolved, by the Follow value: nought leaves the cues' pan and tilt, full replaces them, a value between is part of the way — which is what a cue's fade time does when it turns following on.
+
+**Where it sits in the stack** (`docs/DMX_MERGE.md` §1): between the playbacks and the programmer. A pan or a tilt the **programmer** holds is left alone; the programmer's own *Follow* value counts the way every programmer value does. A cue stores *Follow* like any value (it **tracks**, §6.0), and a cue that stores a pan or a tilt for a head the list is holding at a Follow above nought lets it go (`CueTrack::enter`) — a position is where the head goes.
+
+**Everything that is a function of the show is built before the tick** (§3.1: *nothing derived is computed here — it is read*): which merge slots a head's pan, tilt and Follow are, where it hangs, its travel, its tracker. `prism_engine::FollowLayer::build` does it on the core thread and the layer is handed to the tick **alone** (`TickCommand::AdoptFollow`) — a whole new body would stop every playback for something that did not touch the patch. The tick does one aim per following head per tick: a handful of trigonometric calls, no allocation, measured as the twelfth path in `tick_allocations.rs`.
+
+**On packet timeout** (`TrackerSettings::timeout_ms`, 500 ms by default) the last position is **held**, a warning appears, and nothing jumps. The holding is free — the table keeps the last position of a tracker that has gone quiet — and needs no clock on the tick; the warning is `Core::poll_trackers`, which compares each followed tracker's age with the timeout and says so **once**, and once more when it is back. A tracker nobody has heard leaves its heads to the cues: there is no point at which they could be aimed.
+
+**Which way is up is configuration, because the format does not say.** PSN gives three numbers; the unit and the axes differ between tracking systems, and MA's own consoles ask the operator to map them. `TrackerMapping` names, for each axis of show space, which axis of the tracker's it is read from and whether to flip it, then one scale and one offset. The default (a right-handed space, *z* up, *y* upstage, in metres: show space with *y* and *z* swapped) is **a guess** and is the one thing here not confirmed on a real tracker — §14.
+
+**Who follows whom is the show's; the tracking system is the machine's.** `Fixture::follow` is in the `.prism` file and travels with it; `TrackerSettings` (whether to listen, group, port, interface, the mapping, the timeout) is `machine.json`'s, edited one field at a time by `MachineChange::Tracker`. `FixturePlace` carries the tracker beside the place, so where a head hangs and what it is aimed at from there are one command and one Oops.
+
+**OSC** (S32b) is the same thread's second job — in and out — and is **also a surface**: the binding vocabulary of `docs/MCU_MAPPING.md` §4 is not MCU-specific, and an OSC control that fires a command belongs in the control editor (S38) rather than in a second mapping system.
 
 ---
 
@@ -1291,6 +1316,7 @@ somebody actually followed.
 
 | Item | Where | What to do |
 |---|---|---|
+| 🔌 **PSN against a real tracking system (S32)** | §8, [`crates/prism-protocols/src/psn.rs`](crates/prism-protocols/src/psn.rs), `TrackerMapping::default` in [`crates/prism-domain/src/tracking.rs`](crates/prism-domain/src/tracking.rs) | **Everything a datagram can answer is asserted with nothing plugged in**: the codec is checked against a packet laid out byte by byte from the specification and against 250 000 hostile datagrams (no panic, no allocation), the receiver over a mock socket, and a position on a socket reaches a pan byte on a frame through the real receiver thread, table and tick (`crates/prismd/tests/tracking.rs`). What only a tracking system can answer is **two things nobody has seen**: whether a real system's `PSN_DATA` is what the specification says (chunk ids, little-endian floats, the version-2.03 header), and **which way its axes run** — the default mapping (*z* up, *y* upstage, metres) is a guess, and MA's own consoles ask the operator to map them for the same reason. Both are data: `psn.rs`'s constants and one `TrackerMapping`. The recipe is [`docs/manual/installer.en.md`](docs/manual/installer.en.md) chapter 13: a performer at the front left corner, the list under *Settings → Trackers → Heard*, a head on the tracker, a walk, and an unplugged system (the head must stay where it was and the operator be told once). The multicast path — IGMP snooping on the switch, the firewall's UDP rule, the right interface on a laptop with Wi-Fi — is only a venue's to answer, as sACN's is |
 | ArtNet against a real node | §7.2 and [`crates/prism-protocols/src/artnet.rs`](crates/prism-protocols/src/artnet.rs) | The packet is asserted field by field against the specification and on a received datagram, which is everything a socket can answer. What only a node can answer is whether *it* agrees: the port-address mapping (0-based or 1-based on that manufacturer's front panel) and whether it needs ArtSync. Both are configuration, not code — `PortAddress` and `ArtNetConfig::sync`. **S46 made the first half answerable without reading a front panel**: a node that answers `ArtPoll` tells the desk its own port-address table, and the settings panel says which of those universes this desk sends nothing on and which it sends that the node does not list |
 | ~~Art-Net discovery against a real node~~ | §7.2 and [`crates/prism-protocols/src/discovery.rs`](crates/prism-protocols/src/discovery.rs) | ✅ **Done 2026-08-30 (S46).** An **SGM** node at `2.16.10.66`, directly on Ethernet, no switch: polled, answered, named and shown — `node discovered: "SGM  1" at 2.16.10.66:6454`, one reply per poll. It answers a **unicast** `ArtPoll`, which is what this desk sends and what §6 requires, so *poll where you already send* holds against real hardware. Its reply is 239 bytes and its `ShortName` runs `SGM  1` then a NUL then rubbish — the parser stops at the terminator and reads `SGM  1`, which is the field-by-field check against a real device this row existed for. Two faults were found on the way and both are fixed: a reply padded past 239 bytes was discarded on Windows (`WSAEMSGSIZE`), and the desk's own inbound firewall rule covered the *Private* profile while the lighting network was *Public*, so every reply was dropped before the process saw it. The second one is now a **remedy the desk says out loud**. Original text: S46 built the receive path and everything a *socket* can answer is asserted with nothing on the network: a mock node on loopback is polled, answers, is named and shown; one that stops is *stopped* with the age; one that never answers never reads well; and a quarter of a million random bytes are dropped without a panic or an allocation. What only a real node can answer is two things, and both are about **other people's firmware**: whether it replies to a **unicast** ArtPoll rather than only to a broadcast one — the specification says it must, and this desk deliberately sends no broadcast — and whether it announces itself at power-up, which is what makes an unconfigured node appear. If a venue's nodes turn out to answer only broadcasts, the change is one address and one permission flag in `DiscoveryConfig`, not a code change. Verifying it is an afternoon in a hall with the Outputs panel open |
 | sACN against a real receiver | §7.2 and [`crates/prism-protocols/src/sacn.rs`](crates/prism-protocols/src/sacn.rs) | The packet is asserted field by field against E1.31 and on a received datagram, and the group address is computed for the whole 1…63999 range. What only a gateway and a real switch can answer is whether the **multicast** path works end to end: IGMP snooping on the switch, and a hop limit of 1 being enough for the network the venue actually has. Both are configuration — `SacnDestination` and `SacnConfig::multicast_ttl` — and no test sends multicast, because a test suite must not put sACN on the network it runs on |

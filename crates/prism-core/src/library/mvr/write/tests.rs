@@ -71,6 +71,7 @@ fn fixture(id: u32, name: &str, of: &FixtureType, universe: u32, address: u16) -
         invert_pan: false,
         invert_tilt: false,
         software_dimmer: true,
+        follow: None,
     }
 }
 

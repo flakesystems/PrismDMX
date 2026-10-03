@@ -48,5 +48,7 @@ type being added without one.
 Built in **S1**. Extended by nearly every session since; the ones that changed
 its *shape* are S28 (cue editing), S33 (the output patch), S38 (the binding
 table), S45 (`PlaybackId`), S48 (cue tracking), S52 (an attribute key with an
-occurrence in it) and S54 (`AttributeType::Raw`). `PROGRESS.md` §2 has the
+occurrence in it), S54 (`AttributeType::Raw`) and **S32** (`aim`, the way back
+from the viewer's yoke; `FollowTarget`; `AttributeType::Follow`; the tracker
+settings). `PROGRESS.md` §2 has the
 record for each.

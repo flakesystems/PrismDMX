@@ -484,6 +484,7 @@ fn stress_patch(layout: &FrameLayout, fixture_type: &FixtureType) -> Vec<Fixture
     (0..count)
         .map(|index| Fixture {
             software_dimmer: true,
+            follow: None,
             id: FixtureId::new(index + 1),
             name: String::new(),
             type_id: fixture_type.id.clone(),

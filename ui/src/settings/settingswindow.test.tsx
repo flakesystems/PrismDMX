@@ -28,6 +28,7 @@ import { TelemetrySink } from "../ipc/telemetry";
 import { nullSink, setLogSink } from "../log/logger";
 import { DeskProvider } from "../store/context";
 import { DeskStore, deskEvents } from "../store/desk";
+import { trackersOf } from "./settings";
 import {
   FakeNetwork,
   ManualTimer,
@@ -1609,6 +1610,228 @@ describe("the rows that are easy to leave untested", () => {
     expect(screen.getByTestId("port-choose-X-Touch")).toHaveProperty("disabled", true);
     expect(screen.getByTestId("profile-path")).toHaveProperty("disabled", true);
     expect(screen.getByTestId("profile-note").textContent).toContain("--surface-profile");
+  });
+});
+
+/**
+ * **The Trackers panel** — S32.
+ *
+ * Three questions and none of the answers is computed in the panel: whether the
+ * desk listens (a machine setting, one command per field), how a tracking
+ * system's axes line up with the stage (the same), and what is out there
+ * (`Query::Trackers`, asked while the panel is open). `listening` is said before
+ * the list is, for `ArtNetNodes`' reason.
+ */
+describe("the Trackers panel", () => {
+  const heard = (
+    overrides: Partial<Extract<Answer, { t: "Trackers" }>> = {},
+  ): Extract<Answer, { t: "Trackers" }> => ({
+    t: "Trackers",
+    trackers: [],
+    listening: true,
+    error: null,
+    rejected: 0,
+    ...overrides,
+  });
+
+  it("draws what the daemon says about the receiver, and not the defaults it knows", async () => {
+    const { openPanel } = await desk();
+    openPanel("trackers");
+    expect(screen.getByTestId("trackers-enabled")).toHaveProperty("checked", true);
+    expect(screen.getByTestId("trackers-group")).toHaveProperty("value", "236.10.10.11");
+    expect(screen.getByTestId("trackers-port")).toHaveProperty("value", "56570");
+    expect(screen.getByTestId("trackers-interface")).toHaveProperty("value", "192.168.1.20");
+    expect(screen.getByTestId("trackers-timeout")).toHaveProperty("value", "750");
+    expect(screen.getByTestId("trackers-scale")).toHaveProperty("value", "0.001");
+    expect(screen.getByTestId("trackers-offset-x")).toHaveProperty("value", "1.5");
+    expect(screen.getByTestId("trackers-axis-x-from")).toHaveProperty("value", "X");
+    expect(screen.getByTestId("trackers-axis-x-invert")).toHaveProperty("checked", true);
+    expect(screen.getByTestId("trackers-axis-y-from")).toHaveProperty("value", "Z");
+  });
+
+  /** One command per field, and the box stays where the daemon left it. */
+  it("sends one command per setting and holds nothing", async () => {
+    const { openPanel, commands } = await desk();
+    openPanel("trackers");
+
+    fireEvent.click(screen.getByTestId("trackers-enabled"));
+    expect(commands().at(-1)).toEqual({
+      t: "ConfigureMachine",
+      change: { t: "Tracker", change: { t: "Enabled", enabled: false } },
+    });
+    // Not answered, so not changed.
+    expect(screen.getByTestId("trackers-enabled")).toHaveProperty("checked", true);
+
+    fireEvent.change(screen.getByTestId("trackers-axis-z-from"), { target: { value: "Z" } });
+    expect(commands().at(-1)).toEqual({
+      t: "ConfigureMachine",
+      change: { t: "Tracker", change: { t: "Axis", axis: "Z", from: "Z", invert: true } },
+    });
+    fireEvent.click(screen.getByTestId("trackers-axis-y-invert"));
+    expect(commands().at(-1)).toEqual({
+      t: "ConfigureMachine",
+      change: { t: "Tracker", change: { t: "Axis", axis: "Y", from: "Z", invert: true } },
+    });
+  });
+
+  it("sends a typed field when it is left, once, and only if it changed", async () => {
+    const { openPanel, commands } = await desk();
+    openPanel("trackers");
+    const before = commands().length;
+
+    const group = screen.getByTestId("trackers-group");
+    fireEvent.change(group, { target: { value: "236.10.10.12" } });
+    expect(commands(), "typing is not sending").toHaveLength(before);
+    fireEvent.blur(group);
+    expect(commands().at(-1)).toEqual({
+      t: "ConfigureMachine",
+      change: { t: "Tracker", change: { t: "Group", group: "236.10.10.12" } },
+    });
+
+    // Left without a change: nothing goes.
+    const count = commands().length;
+    fireEvent.blur(screen.getByTestId("trackers-port"));
+    expect(commands()).toHaveLength(count);
+
+    fireEvent.change(screen.getByTestId("trackers-interface"), { target: { value: "" } });
+    fireEvent.blur(screen.getByTestId("trackers-interface"));
+    expect(commands().at(-1)).toEqual({
+      t: "ConfigureMachine",
+      change: { t: "Tracker", change: { t: "Interface", address: null } },
+    });
+
+    fireEvent.change(screen.getByTestId("trackers-scale"), { target: { value: "0,01" } });
+    fireEvent.blur(screen.getByTestId("trackers-scale"));
+    expect(commands().at(-1)).toEqual({
+      t: "ConfigureMachine",
+      change: { t: "Tracker", change: { t: "Scale", scale: 0.01 } },
+    });
+
+    // Something that is not a number is not sent: the daemon would refuse it, and
+    // a refusal for a typo is a worse answer than none.
+    const typo = commands().length;
+    fireEvent.change(screen.getByTestId("trackers-scale"), { target: { value: "metres" } });
+    fireEvent.blur(screen.getByTestId("trackers-scale"));
+    expect(commands()).toHaveLength(typo);
+  });
+
+  it("moves the origin as one command when a field is left", async () => {
+    const { openPanel, commands } = await desk();
+    openPanel("trackers");
+    fireEvent.change(screen.getByTestId("trackers-offset-y"), { target: { value: "0.5" } });
+    fireEvent.blur(screen.getByTestId("trackers-offset-y"));
+    expect(commands().at(-1)).toEqual({
+      t: "ConfigureMachine",
+      change: { t: "Tracker", change: { t: "Offset", offset: { x: 1.5, y: 0.5, z: -2 } } },
+    });
+  });
+
+  it("follows the daemon when a setting changes", async () => {
+    const { openPanel, deliver } = await desk();
+    openPanel("trackers");
+    const next = machine();
+    const trackers = trackersOf(next);
+    await deliver({
+      t: "MachineChanged",
+      settings: {
+        ...next,
+        trackers: {
+          ...trackers,
+          enabled: false,
+          group: "10.0.0.5",
+          mapping: { ...trackers.mapping, scale: 1 },
+        },
+      },
+    });
+    expect(screen.getByTestId("trackers-enabled")).toHaveProperty("checked", false);
+    expect(screen.getByTestId("trackers-group")).toHaveProperty("value", "10.0.0.5");
+    expect(screen.getByTestId("trackers-scale")).toHaveProperty("value", "1");
+  });
+
+  it("asks what is out there while it is open, and says it is listening before it lists", async () => {
+    const { openPanel, answerQuery } = await desk();
+    openPanel("trackers");
+    await answerQuery("Trackers", heard());
+    expect(screen.getByTestId("trackers-status").textContent).toContain("nothing has been heard");
+    expect(screen.queryByTestId("tracker-row-3")).toBeNull();
+  });
+
+  it("lists each tracker with its position, its age and how many heads follow it", async () => {
+    const { openPanel, answerQuery } = await desk();
+    openPanel("trackers");
+    await answerQuery(
+      "Trackers",
+      heard({
+        trackers: [
+          {
+            id: 3,
+            name: "Anna",
+            position: { x: 1.25, y: 1.7, z: -4.5 },
+            ageMs: 40,
+            health: "Live",
+            followers: 2,
+          },
+          {
+            id: 4,
+            name: null,
+            position: { x: 0, y: 0, z: 0 },
+            ageMs: 12_345,
+            health: "Quiet",
+            followers: 0,
+          },
+          {
+            id: 9,
+            name: "Ben",
+            position: { x: 0, y: 0, z: 0 },
+            // `u64::MAX`, as a double reads it.
+            ageMs: 1.8446744073709552e19,
+            health: "Quiet",
+            followers: 1,
+          },
+        ],
+        rejected: 2,
+      }),
+    );
+    const row = screen.getByTestId("tracker-row-3").textContent ?? "";
+    expect(row).toContain("Anna");
+    expect(row).toContain("1.25");
+    expect(row).toContain("-4.50");
+    expect(screen.getByTestId("tracker-health-3").textContent).toBe("live (0.0 s)");
+    expect(screen.getByTestId("tracker-heads-3").textContent).toBe("2");
+    expect(screen.getByTestId("tracker-health-4").textContent).toBe("quiet for 12 s");
+    expect(screen.getByTestId("tracker-health-9").textContent).toBe("never heard");
+    expect(screen.getByTestId("trackers-status").textContent).toContain("3 trackers heard");
+    expect(screen.getByTestId("trackers-status").textContent).toContain(
+      "2 datagrams on the group were not PSN",
+    );
+  });
+
+  /**
+   * Not listening is drawn before the list, for `ArtNetNodes`' reason: an empty
+   * list under a receiver that never opened says nothing about the network.
+   */
+  it("says why it is not listening, in the daemon's own words", async () => {
+    const { openPanel, answerQuery } = await desk();
+    openPanel("trackers");
+    await answerQuery(
+      "Trackers",
+      heard({
+        listening: false,
+        error: "could not join 236.10.10.11:56570: the local address could not be bound",
+      }),
+    );
+    expect(screen.getByTestId("trackers-status").textContent).toContain("could not be bound");
+  });
+
+  it("says a switched-off receiver is switched off", async () => {
+    const off = trackersOf(machine());
+    const { openPanel, answerQuery } = await desk({
+      machine: machine({ trackers: { ...off, enabled: false } }),
+    });
+    openPanel("trackers");
+    await answerQuery("Trackers", heard({ listening: false }));
+    expect(screen.getByTestId("trackers-status").textContent).toContain("Not listening");
+    expect(screen.getByTestId("trackers-status").textContent).toContain("hold where they are");
   });
 });
 

@@ -1943,6 +1943,8 @@ const fn attribute_name(attribute: AttributeType) -> &'static str {
         // word* is the point, and the encoder carries the manufacturer's own
         // name for it beside the number.
         AttributeType::Raw => "Raw",
+        // **S32.** `1 follow at 100` puts a head with a tracker on its tracker.
+        AttributeType::Follow => "Follow",
     }
 }
 

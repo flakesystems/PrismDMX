@@ -24,6 +24,7 @@ given in English because that is what it says.
 10. [The machine with no screen, and the Raspberry Pi](#10-the-machine-with-no-screen-and-the-raspberry-pi)
 11. [Handover: what to check before you leave](#11-handover-what-to-check-before-you-leave)
 12. [Fault-finding](#12-fault-finding)
+13. [Trackers (PSN)](#13-trackers-psn)
 
 ---
 
@@ -451,6 +452,7 @@ when something is reported.
 | The program starts but no window | A desk is already running and its listener is off. The message says which process holds the desk, where it wanted to be reachable, and which data directory the two are arguing about |
 | The window is white | The WebView2 runtime is missing (chapter 2) |
 | Fixture library empty | `profiles\fixtures` beside the program. Install it with `tools\fetch-fixtures\fetch-fixtures.ps1`, which takes either a folder of `.gdtf` files (`PRISMDMX_GDTF_SOURCE`) or a free account on <https://gdtf-share.com> (`PRISMDMX_GDTF_USER` and `PRISMDMX_GDTF_PASSWORD`). That service has no anonymous bulk download, which is why it asks. The desk starts either way, with four built-in profiles, and says so in the log |
+| A tracker is "sent" and never shown | *Settings → Trackers*: the status line says if the receiver is open and why not; the count of datagrams that were not PSN version 2 says if something else is on the group. Then the interface (chapter 13) and the firewall's UDP rule |
 | The library is there but nothing is drawn in 3D | The log says how many of the profiles are GDTF. A library installed before version 0.9.3 is Open Fixture Library data: the right channels in the right order, and no gobo pictures, no models and no beam geometry. Re-run the installer |
 
 **The log** is in `%APPDATA%\PrismDMX`. Before a reproducible fault, set the level
@@ -460,6 +462,78 @@ in *Settings → This machine* to `debug`.
 [github.com/flakesystems/PrismDMX/issues](https://github.com/flakesystems/PrismDMX/issues).
 For a fault in the outputs, the network or the control surface, `machine.json`
 belongs with it — **read it first**, it contains this desk's token if one is set.
+
+---
+
+## 13. Trackers (PSN)
+
+For a venue with a tracking system — openfollow.app, or anything that speaks
+**PosiStageNet** — the desk can point a moving head at a performer
+(*operator's manual*, chapter 8). This chapter is the part that is the
+installer's: the network, and which way is up.
+
+### Is it on, and where does it listen
+
+*Settings → Trackers → Receiver*. It is **off** until somebody ticks *Listen for
+trackers*: a desk that opens a multicast socket nobody asked for surprises a
+firewall.
+
+| Setting | What you need to know |
+|---|---|
+| **Group** | `236.10.10.10`, which is where PSN systems send unless told otherwise. An address that is **not** a multicast group is listened on directly — a tracker that sends to this machine alone |
+| **Port** | `56565`. The desk shares it: a visualiser or a media server on the same machine hears the same packets |
+| **Interface** | The address of the network card to listen on. **A laptop with Wi-Fi and a lighting network is exactly where the system's choice is the wrong one** — name the lighting card's address (`192.168.1.20`) and leave it blank only on a machine with one network |
+| **Quiet after, ms** | How long a tracker may send nothing before the desk says so (500 by default). It decides when the operator is **told**, not what the head does: a quiet tracker's head is held where it was |
+
+The status line under *Heard* says whether the receiver is open and, if it is
+not, **why** — another program holding the port without sharing it, an interface
+that is not on this machine. A datagram count beside it says how many arrived
+that were not PSN version 2: a tracking system that "sends" and is never seen is,
+nine times in ten, that number counting up (a different protocol, PSN version 1,
+or another system on the same group).
+
+**The firewall** has to let this program in on **UDP**, on the lighting
+network's profile — the same rule chapter 5 describes for Art-Net replies. A
+multicast group also needs the switch to forward it: with IGMP snooping on, a
+switch without a querier forgets a listener after a few minutes.
+
+### Which way is up
+
+PSN gives three numbers and **does not say** which axis is up or what a unit is,
+and tracking systems differ. So the desk asks, in *Settings → Trackers → Axes*:
+for each axis of the stage — **X across**, **Y up**, **Z upstage** — which axis of
+the tracker's it is read from, and whether it runs the other way; then *metres
+per unit* (`1` for metres, `0.001` for millimetres) and where the tracking
+system's **origin** is on the stage.
+
+The default reads a right-handed tracking space with *z* up and *y* upstage, in
+metres. **That is a guess**, the one thing in this chapter nobody has confirmed on
+a real tracker. Check it once, which takes a minute:
+
+1. Switch the receiver on and let one performer wear a tracker.
+2. Stand them at the **front left corner** of the stage, at the floor. Read the
+   list under *Heard*: *X* should be the corner's across-stage coordinate, *Y*
+   near nought (the floor), *Z* its depth. A walk upstage should raise *Z*; if it
+   raises *Y*, *Y* and *Z* are swapped.
+3. Fix what is wrong with the axes, the scale and the origin until the three
+   numbers are where the performer is.
+4. Give a head the tracker (*Viewer 3D → Follows*), set its *Follow* to full from
+   the programmer, and walk. The head should be pointing at the performer's
+   chest, not at the floor and not over their head — the *Y* under *Follows* is the
+   correction.
+
+### What to check before you leave
+
+Add to chapter 11: **the head follows**. A tracker heard, a head on it, a walk
+from one side of the stage to the other, and the head follows without a swing the
+long way round. Then unplug the tracking system: within the *quiet after* time the
+operator is told once, and **the head stays where it was** — nothing jumps. Plug it
+back in: the head moves to where the performer now is, and the operator is told it
+is back.
+
+> The mapping is **checked only against simulated trackers**; `ARCHITECTURE_SPEC.md`
+> §14 lists a real tracking system as a row nobody has closed. A handover with one
+> is the contribution that closes it.
 
 ---
 

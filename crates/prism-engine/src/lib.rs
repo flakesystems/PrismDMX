@@ -143,6 +143,7 @@ mod clock;
 mod command;
 mod cue;
 mod encode;
+mod follow;
 mod frame;
 mod master;
 mod merge;
@@ -157,6 +158,7 @@ mod sync;
 #[cfg(all(test, not(loom)))]
 mod testkit;
 mod tick;
+mod tracker;
 mod triple_buffer;
 
 pub use body::{MergeBody, NO_PLAYBACKS};
@@ -167,6 +169,7 @@ pub use cue::{
     interpolate, ticks_from_seconds,
 };
 pub use encode::{ChannelPlan, ChannelTarget, PatchError, coarse_byte, fine_byte, invert};
+pub use follow::FollowLayer;
 pub use frame::{DmxFrame, FrameLayout, LayoutError, MAX_UNIVERSES, UNIVERSE_CHANNELS};
 pub use master::MasterLayer;
 pub use merge::{
@@ -182,6 +185,7 @@ pub use stats::{Histogram, TickStats};
 pub use tick::{
     Engine, IdleBody, TICK_HZ, TICK_PERIOD, TickBody, TickInfo, deadline_offset, tick_index_at,
 };
+pub use tracker::{TRACKERS, TrackerTable};
 pub use triple_buffer::{
     EnrolmentFull, FrameEnrolment, FramePublisher, FrameSubscriber, MAX_SUBSCRIBERS, SubscriberId,
 };

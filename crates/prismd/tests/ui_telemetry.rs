@@ -296,6 +296,7 @@ fn wide_show() -> ShowFile {
             file.show
                 .patch_fixture(Fixture {
                     software_dimmer: true,
+                    follow: None,
                     id: FixtureId::new(1000 + universe * 16 + index),
                     name: format!("Wide {universe}.{index}"),
                     type_id: if dark {

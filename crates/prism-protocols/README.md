@@ -14,6 +14,15 @@ sends `ArtPoll` to the nodes this desk *already sends to* — never a broadcast 
 and parses what comes back, so a configured node that nothing is listening on
 reads *stopped* rather than *OK*.
 
+Since **S32** there is a second, and it listens: `psn` reads PosiStageNet (the
+tracker packets of a tracking system, over UDP multicast), and `TrackerReceiver`
+turns what arrives into positions in show space and writes them to the table the
+tick reads. It is the one input in this crate, it **never** blocks the engine,
+and the codec allocates nothing and cannot panic on a stranger's bytes
+(`tests/psn_fuzz.rs` measures both). A group is joined through
+`UdpNode::listen_multicast`, which shares the port; the double records the join
+and no test puts a multicast datagram on the network it runs on.
+
 ## What it may not contain
 
 This is **one of the four crates `ARCHITECTURE_SPEC.md` §10.1 allows
@@ -53,5 +62,6 @@ the recipe, and it needs an adapter.
 ## Sessions
 
 Built in **S7–S10**. Extended by S33 (several outputs at once, each carrying the
-universes its row names) and **S46** (the receive path, and node discovery).
+universes its row names), **S46** (the receive path, and node discovery) and
+**S32** (PSN: the tracker receiver).
 `PROGRESS.md` §2.

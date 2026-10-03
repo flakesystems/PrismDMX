@@ -134,6 +134,9 @@ pub fn name_of(attribute: AttributeType, occurrence: u8, label: Option<&str>) ->
         AttributeType::Focus => Some(numbered("Focus", "")),
         AttributeType::Shutter => Some(numbered("Shutter", "Strobe")),
         AttributeType::Raw => None,
+        // **S32.** The desk's own: a slot with no channel is in no profile, so
+        // the exporter is never asked for its name.
+        AttributeType::Follow => None,
     };
     standard.unwrap_or_else(|| {
         // Letters only, behind a word no table row starts with, so [`of`] reads
@@ -495,6 +498,11 @@ mod tests {
     #[test]
     fn a_written_name_reads_back_as_the_attribute_it_was() {
         for attribute in AttributeType::ALL {
+            // The desk's own `Follow` has no channel and is in no profile, so
+            // no export ever writes it (S32).
+            if attribute == AttributeType::Follow {
+                continue;
+            }
             for occurrence in 0..4_u8 {
                 let name = name_of(attribute, occurrence, Some("A Manufacturer's Word 7"));
                 let (read, number) = of(&name);

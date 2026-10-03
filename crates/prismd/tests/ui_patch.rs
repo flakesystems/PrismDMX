@@ -84,6 +84,7 @@ fn patch_show() -> ShowFile {
     ] {
         show.patch_fixture(prism_domain::Fixture {
             software_dimmer: true,
+            follow: None,
             id: FixtureId::new(id),
             name: format!("Fixture {id}"),
             type_id: type_id.to_owned(),

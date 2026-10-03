@@ -162,6 +162,16 @@ pub enum TickCommand {
     /// it reaches the body that is leaving, and every command after it the one
     /// that is arriving. A `MergeBody` ignores it; the host acts on it.
     AdoptBody,
+    /// **Here the rebuilt follow layer takes over** - S32.
+    ///
+    /// The same idea as [`Self::AdoptBody`] for a smaller thing: giving a head a
+    /// tracker, or moving a head that has one, changes what the follow layer
+    /// knows and **nothing about the patch**, and rebuilding the whole body for
+    /// it would stop every playback in the middle of a show. So the layer is
+    /// built on the core thread and left in a hand-over of its own, and this
+    /// marks the point in the queue where it takes effect. A `MergeBody`
+    /// ignores it; the host acts on it.
+    AdoptFollow,
 }
 
 impl TickCommand {
@@ -194,6 +204,7 @@ impl TickCommand {
     const TAG_EXECUTOR_FADE: u8 = 15;
     /// S30b's swap marker.
     const TAG_ADOPT_BODY: u8 = 16;
+    const TAG_ADOPT_FOLLOW: u8 = 17;
 
     /// The target as the number the codec carries.
     const fn split(target: PlaybackId) -> u32 {
@@ -267,6 +278,7 @@ impl TickPayload for TickCommand {
             Self::ClearProgrammerValue { slot } => (Self::TAG_PROGRAMMER_CLEAR_VALUE, slot, 0),
             Self::ClearProgrammer => (Self::TAG_PROGRAMMER_CLEAR, 0, 0),
             Self::AdoptBody => (Self::TAG_ADOPT_BODY, 0, 0),
+            Self::AdoptFollow => (Self::TAG_ADOPT_FOLLOW, 0, 0),
         };
         let [e0, e1, e2, e3] = target.to_le_bytes();
         let [v0, v1] = value.to_le_bytes();
@@ -354,6 +366,7 @@ impl TickPayload for TickCommand {
             Self::TAG_PROGRAMMER_CLEAR_VALUE => Some(Self::ClearProgrammerValue { slot: target }),
             Self::TAG_PROGRAMMER_CLEAR => Some(Self::ClearProgrammer),
             Self::TAG_ADOPT_BODY => Some(Self::AdoptBody),
+            Self::TAG_ADOPT_FOLLOW => Some(Self::AdoptFollow),
             _ => None,
         }
     }
@@ -438,6 +451,7 @@ mod tests {
             TickCommand::ClearProgrammerValue { slot: 4_242 },
             TickCommand::ClearProgrammer,
             TickCommand::AdoptBody,
+            TickCommand::AdoptFollow,
         ];
         for command in commands {
             assert_eq!(round_trip(command), Some(command), "{command:?}");

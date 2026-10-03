@@ -258,6 +258,7 @@ fn patched(profile: &FixtureType) -> ShowFile {
             invert_pan: false,
             invert_tilt: false,
             software_dimmer: true,
+            follow: None,
         })
         .unwrap();
     file

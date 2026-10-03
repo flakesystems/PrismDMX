@@ -61,6 +61,10 @@ import type {
   TrackedValue,
   StorePreview,
   SwitchState,
+  AxisSource,
+  SeenTracker,
+  TrackerMapping,
+  TrackerSettings,
 } from "../bindings";
 import {
   ATTRIBUTE_TYPE_VARIANTS,
@@ -83,7 +87,9 @@ import {
   STEP_VARIANTS,
   STORE_MODE_VARIANTS,
   STRIP_BUTTON_VARIANTS,
+  SOURCE_AXIS_VARIANTS,
   SURFACE_HEALTH_VARIANTS,
+  TRACKER_HEALTH_VARIANTS,
   WINDOW_TYPE_VARIANTS,
 } from "../bindings";
 import type { JsonPatchOp, JsonValue, ProgrammerEntry, ProgrammerValue } from "../bindings";
@@ -744,6 +750,19 @@ export function readAnswer(value: unknown, path: string): Answer {
         // appears. `Answer::MidiPorts`' remedy is the precedent (S37).
         remedy: readOptionalString(field(record, "remedy"), `${path}.remedy`),
       };
+    // S32. The trackers this desk has heard, and **whether it is listening** -
+    // read before the list is, for `ArtNetNodes`' reason: an empty list under a
+    // receiver that never opened says nothing about the network.
+    case "Trackers":
+      return {
+        t: "Trackers",
+        trackers: asArray(field(record, "trackers"), `${path}.trackers`).map((row, index) =>
+          readSeenTracker(row, `${path}.trackers[${index}]`),
+        ),
+        listening: asBoolean(field(record, "listening"), `${path}.listening`),
+        error: readOptionalString(field(record, "error"), `${path}.error`),
+        rejected: asNumber(field(record, "rejected"), `${path}.rejected`),
+      };
     // S48. What every cue of one list **inherits**, which is the one thing a
     // cue sheet cannot work out for itself: folding the cues would be a second
     // implementation of the rule the engine resolves a `Goto` through, and two
@@ -1368,6 +1387,65 @@ function readOptionalInteger(value: unknown, path: string): number | null {
  * addresses are strings on the wire (`prism_domain::socket`) and stay strings
  * here, because what a panel does with one is print it.
  */
+/** A tracking system's axis, as the daemon spells one. */
+function readAxisSource(value: unknown, path: string): AxisSource {
+  const record = asRecord(value, path);
+  return {
+    from: asVariant(field(record, "from"), `${path}.from`, SOURCE_AXIS_VARIANTS),
+    invert: asBoolean(field(record, "invert"), `${path}.invert`),
+  };
+}
+
+/** A position or an offset: three numbers. */
+function readVector(value: unknown, path: string): { x: number; y: number; z: number } {
+  const record = asRecord(value, path);
+  return {
+    x: asNumber(field(record, "x"), `${path}.x`),
+    y: asNumber(field(record, "y"), `${path}.y`),
+    z: asNumber(field(record, "z"), `${path}.z`),
+  };
+}
+
+function readTrackerMapping(value: unknown, path: string): TrackerMapping {
+  const record = asRecord(value, path);
+  return {
+    x: readAxisSource(field(record, "x"), `${path}.x`),
+    y: readAxisSource(field(record, "y"), `${path}.y`),
+    z: readAxisSource(field(record, "z"), `${path}.z`),
+    scale: asNumber(field(record, "scale"), `${path}.scale`),
+    offset: readVector(field(record, "offset"), `${path}.offset`),
+  };
+}
+
+/** How this machine listens for trackers - S32. */
+function readTrackerSettings(value: unknown, path: string): TrackerSettings {
+  const record = asRecord(value, path);
+  return {
+    enabled: asBoolean(field(record, "enabled"), `${path}.enabled`),
+    interface: readOptionalString(field(record, "interface"), `${path}.interface`),
+    group: asString(field(record, "group"), `${path}.group`),
+    port: asInteger(field(record, "port"), `${path}.port`),
+    mapping: readTrackerMapping(field(record, "mapping"), `${path}.mapping`),
+    timeoutMs: asInteger(field(record, "timeoutMs"), `${path}.timeoutMs`),
+  };
+}
+
+/** One tracker the daemon has heard from - S32. */
+function readSeenTracker(value: unknown, path: string): SeenTracker {
+  const record = asRecord(value, path);
+  return {
+    id: asInteger(field(record, "id"), `${path}.id`),
+    name: readOptionalString(field(record, "name"), `${path}.name`),
+    position: readVector(field(record, "position"), `${path}.position`),
+    // `u64::MAX` is *never heard*, which is an integer a double cannot hold
+    // exactly: an age the daemon has never measured arrives as a very large
+    // number and is read as one, and the panel tests for it with `>=`.
+    ageMs: asNumber(field(record, "ageMs"), `${path}.ageMs`),
+    health: asVariant(field(record, "health"), `${path}.health`, TRACKER_HEALTH_VARIANTS),
+    followers: asInteger(field(record, "followers"), `${path}.followers`),
+  };
+}
+
 function readMachineSettings(value: unknown, path: string): MachineSettings {
   const record = asRecord(value, path);
   return {
@@ -1398,6 +1476,13 @@ function readMachineSettings(value: unknown, path: string): MachineSettings {
     // one is the curve unchanged rather than a wheel that does nothing — which
     // is what a missing field read as nought would draw in the box.
     jogSensitivity: asInteger(field(record, "jogSensitivity") ?? 100, `${path}.jogSensitivity`),
+    // **A daemon before S32 has no tracking settings**, and the honest answer
+    // for one is *not listening, the published defaults* - which is what a
+    // missing field read as nothing would draw as a panel full of blanks.
+    trackers:
+      field(record, "trackers") === undefined
+        ? NO_TRACKERS
+        : readTrackerSettings(field(record, "trackers"), `${path}.trackers`),
     // A row this build does not know is **left out** rather than refused, which
     // is `canvas/windows.ts`'s rule for a window type: a daemon one version
     // ahead should cost a greyed-out row, not a connection.
@@ -1430,8 +1515,33 @@ const NO_MACHINE: MachineSettings = {
   fixtureLibrary: null,
   surfaceProfile: null,
   libraryAccount: null,
+  trackers: defaultTrackers(),
   overrides: [],
 };
+
+/**
+ * The tracking settings of a desk that has never been told: not listening, and
+ * the group, port and mapping the specification publishes - `prism_domain`'s
+ * `TrackerSettings::default`, said again for a daemon that says nothing.
+ */
+const NO_TRACKERS: TrackerSettings = defaultTrackers();
+
+export function defaultTrackers(): TrackerSettings {
+  return {
+    enabled: false,
+    interface: null,
+    group: "236.10.10.10",
+    port: 56565,
+    mapping: {
+      x: { from: "X", invert: false },
+      y: { from: "Z", invert: false },
+      z: { from: "Y", invert: false },
+      scale: 1,
+      offset: { x: 0, y: 0, z: 0 },
+    },
+    timeoutMs: 500,
+  };
+}
 
 /** The show file, or what a daemon that does not say looks like. */
 function readOptionalShowFileInfo(value: unknown, path: string): ShowFileInfo {

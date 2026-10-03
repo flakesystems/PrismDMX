@@ -49,6 +49,7 @@ mod sequence;
 mod session;
 pub mod socket;
 mod surface;
+mod tracking;
 #[cfg(test)]
 mod wire;
 
@@ -88,7 +89,10 @@ pub use patch::{
     CHANNELS_PER_UNIVERSE, Fixture, Group, MAX_PATCH_AT_ONCE, PatchAddress, PatchPlacement,
     RgbColor, Vec3,
 };
-pub use placement::{FixturePlace, MAX_REACH, Orientation, orientation, rotation_of, turn};
+pub use placement::{
+    Aim, FixturePlace, FollowTarget, MAX_REACH, MAX_TRACKER, Orientation, Travel, aim, orientation,
+    rotation_of, turn,
+};
 pub use playback::{PlaybackId, PlaybackTarget};
 pub use preset::{Preset, PresetPool, PresetValue};
 pub use programmer::{
@@ -112,4 +116,8 @@ pub use surface::{
     BoundControl, ControlBox, ControlShape, ExecutorTarget, GlobalButton, PanelLayout,
     RESERVED_BUTTONS, RESERVED_REASON, Step, StripButton, SurfaceAction, SurfaceBinding,
     SurfaceControl,
+};
+pub use tracking::{
+    AxisSource, DEFAULT_GROUP, DEFAULT_PORT, DEFAULT_TIMEOUT_MS, SeenTracker, ShowAxis, SourceAxis,
+    TIMEOUT_RANGE_MS, TrackerChange, TrackerHealth, TrackerMapping, TrackerSettings,
 };

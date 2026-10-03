@@ -98,9 +98,11 @@ mod discovery;
 mod ftdi;
 mod opendmx;
 mod output;
+pub mod psn;
 mod runner;
 mod sacn;
 mod system;
+mod tracking;
 mod udp;
 // The virtual COM port path: the Windows fallback, and on macOS the only one
 // there is — S63. See `system.rs` for why macOS has no D2XX path.
@@ -145,6 +147,7 @@ pub use sacn::{
     source_name_field, write_e131_data,
 };
 pub use system::{FallbackFtdi, UnsupportedBackend, list_devices, system_backend};
+pub use tracking::{Listen, TrackerReceiver, TrackerRow, TrackingConfig, TrackingCounters};
 pub use udp::{
     MockUdp, MockUdpHandle, MockUdpNode, MockUdpNodeHandle, SystemUdp, SystemUdpNode, UdpError,
     UdpNode, UdpSender, classify,

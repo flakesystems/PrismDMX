@@ -26,9 +26,13 @@ import type {
   MachineChange,
   MachineOverride,
   MachineSettings,
+  SeenTracker,
+  ShowAxis,
   SurfaceHealth,
   SurfaceStatus,
+  TrackerSettings,
 } from "../bindings";
+import { defaultTrackers } from "../ipc/protocol";
 import type { AutostartReport } from "../shell/bridge";
 import type { LibraryUpdateState } from "../store/desk";
 
@@ -38,12 +42,15 @@ import type { LibraryUpdateState } from "../store/desk";
  * Four from S37 and **Controls** from S38, and it sits next to *Devices* on
  * purpose: that panel names the desk's MIDI port and the file its table was read
  * from, and this one is what that table says. An operator who has just chosen a
- * port is one click from what its keys do.
+ * port is one click from what its keys do. **Trackers** is S32's, and it sits
+ * with the other things that come in from outside - after the control surface,
+ * before the files.
  */
 export const PANELS = [
   "Outputs",
   "Devices",
   "Controls",
+  "Trackers",
   "Show files",
   "This machine",
 ] as const;
@@ -301,4 +308,92 @@ export function libraryUpdateText(update: LibraryUpdateState): string {
     return "Signing in and asking what is published\u2026";
   }
   return `${String(update.done)} of ${String(update.total)} fixtures\u2026`;
+}
+
+// -- trackers (S32) ---------------------------------------------------------
+
+/**
+ * How this machine listens for trackers.
+ *
+ * `trackers` is optional in the generated type - the daemon's field is
+ * `#[serde(default)]` - so this is the one place the absence is answered: a
+ * daemon that never said is a desk that is not listening, with the published
+ * defaults.
+ */
+export function trackersOf(machine: MachineSettings): TrackerSettings {
+  return machine.trackers ?? defaultTrackers();
+}
+
+/** A typed number, or `null` for anything that is not one. A comma reads as a point. */
+export function readNumber(text: string): number | null {
+  const trimmed = text.trim().replace(",", ".");
+  if (trimmed === "") {
+    return null;
+  }
+  const value = Number(trimmed);
+  return Number.isFinite(value) ? value : null;
+}
+
+/** An axis of the stage, in words a person standing on it would use. */
+export function showAxisText(axis: ShowAxis): string {
+  switch (axis) {
+    case "X":
+      return "X — across the stage";
+    case "Y":
+      return "Y — up";
+    case "Z":
+      return "Z — upstage";
+  }
+}
+
+/**
+ * How long ago a tracker was heard, in words - or that it never has been.
+ *
+ * The daemon sends `u64::MAX` for *never*, which a double rounds up, so it is
+ * recognised by size and not by equality.
+ */
+export function ageText(tracker: Pick<SeenTracker, "ageMs" | "health">): string {
+  if (tracker.ageMs >= Number.MAX_SAFE_INTEGER) {
+    return "never heard";
+  }
+  const seconds = tracker.ageMs / 1000;
+  const age = seconds < 10 ? `${seconds.toFixed(1)} s` : `${String(Math.round(seconds))} s`;
+  return tracker.health === "Live" ? `live (${age})` : `quiet for ${age}`;
+}
+
+/**
+ * What the receiver is doing, in one sentence - or two states and a reason.
+ *
+ * *Listening* is said before anything about the list, for the reason the panel
+ * draws it first: an empty list under a receiver that never opened says nothing
+ * about the network.
+ */
+export function trackerStatusText(
+  enabled: boolean,
+  heard: {
+    readonly trackers: readonly SeenTracker[];
+    readonly listening: boolean;
+    readonly error: string | null;
+    readonly rejected: number;
+  } | null,
+): string {
+  if (heard === null) {
+    return "Asking the desk what it hears…";
+  }
+  if (heard.error !== null) {
+    return `Not listening: ${heard.error}`;
+  }
+  if (!heard.listening) {
+    return enabled
+      ? "Not listening yet."
+      : "Not listening. Tick the box above to receive trackers; heads that follow one hold where they are.";
+  }
+  const rejected =
+    heard.rejected > 0
+      ? ` ${String(heard.rejected)} datagram${heard.rejected === 1 ? "" : "s"} on the group were not PSN version 2.`
+      : "";
+  if (heard.trackers.length === 0) {
+    return `Listening, and nothing has been heard yet.${rejected}`;
+  }
+  return `Listening. ${String(heard.trackers.length)} tracker${heard.trackers.length === 1 ? "" : "s"} heard.${rejected}`;
 }

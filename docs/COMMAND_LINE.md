@@ -124,8 +124,14 @@ desk says so rather than guessing.
 | `Full` | the selection to full, with nothing else on the line |
 
 An attribute word is the attribute's own name, lower-cased: `dimmer`, `pan`,
-`red`, `colorwheel`, `warmwhite`, `bladerotation`. There are forty-one of them
+`red`, `colorwheel`, `warmwhite`, `bladerotation`. There are forty-two of them
 and `prism_domain::AttributeType` is the list.
+
+**`follow` is the desk's own** — S32. It is not a channel of any profile: every
+head with a pan and a tilt has it, and it says how far the head follows its
+tracker. `1 follow at 100` puts fixture 1 on its tracker, `1 follow at 0` hands
+it back to the cues, and a cue stores it like any value (a head that has been
+given no tracker does nothing with it).
 
 **`raw` is the odd one and the useful one** — S54. It is not a kind of
 parameter; it is *a channel this desk has no word for*, and every DMX slot of a

@@ -48,6 +48,7 @@ use core::str::FromStr;
 
 use prism_domain::{
     Command, ExitAction, LogLevel, MachineChange, OutputId, OutputInstance, SurfaceBinding,
+    TrackerChange,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -161,7 +162,7 @@ impl<'de> Deserialize<'de> for DeskId {
 /// playing? — comes up again for output configuration and for the DMX adapter on
 /// this machine, and those must not end up in the show file either"*. S33 is
 /// that session, and `crates/prism-core/src/outputs.rs` has the argument in full.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MachineConfig {
     /// The sACN CID of this desk. See the module documentation.
@@ -273,7 +274,7 @@ pub struct MachineConfig {
 /// [`MachineConfig::apply`] has one place to write. Every field is
 /// `#[serde(default)]` by virtue of the whole struct being one, which is what
 /// lets a later session add a sixteenth without any existing desk noticing.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     /// Whether the named pipe / Unix domain socket is opened. Default `true`.
@@ -317,6 +318,13 @@ pub struct Settings {
     /// is what a plain `Default` of zero would have produced.
     #[serde(default = "unity")]
     pub jog_sensitivity: u16,
+    /// How this machine listens for trackers - S32.
+    ///
+    /// **The machine's**, because *which network the tracking system is on and
+    /// how its axes line up with this stage* is a fact about the building. Who
+    /// follows whom is the show's, on the fixture. Off by default, so a
+    /// `machine.json` written before PSN reads as a desk that does not listen.
+    pub trackers: prism_domain::TrackerSettings,
 }
 
 /// A jog wheel nobody has adjusted — the curve exactly as shipped.
@@ -360,6 +368,7 @@ impl Default for Settings {
             fixture_library: None,
             surface_profile: None,
             jog_sensitivity: unity(),
+            trackers: prism_domain::TrackerSettings::default(),
         }
     }
 }
@@ -672,6 +681,77 @@ impl MachineConfig {
                 }
             }
             MachineChange::SurfaceLearn { .. } => {}
+            // **The tracking group** - S32, and one variant for the reason it is
+            // one in the domain. Each change is refused whole rather than clamped
+            // where a wrong value would put a head on a point nobody is standing
+            // on: an interface or a group that is not an address, a port that is
+            // nought, a scale that turns the stage inside out. The one that *is*
+            // clamped is the timeout, which is a threshold for a warning and has a
+            // sensible nearest.
+            MachineChange::Tracker { change } => self.configure_trackers(change)?,
+        }
+        Ok(())
+    }
+
+    /// One tracking setting - S32. See [`prism_domain::TrackerChange`].
+    fn configure_trackers(&mut self, change: &TrackerChange) -> Result<(), MachineError> {
+        match change {
+            TrackerChange::Enabled { enabled } => self.settings.trackers.enabled = *enabled,
+            TrackerChange::Interface { address } => {
+                let mut trial = self.settings.trackers.clone();
+                trial.interface = blank_is_none(address.as_deref());
+                if trial.interface_address().is_err() {
+                    return Err(MachineError::BadTrackerAddress(
+                        address.clone().unwrap_or_default(),
+                    ));
+                }
+                self.settings.trackers.interface = trial.interface;
+            }
+            TrackerChange::Group { group } => {
+                let mut trial = self.settings.trackers.clone();
+                group.trim().clone_into(&mut trial.group);
+                if trial.group_address().is_none() {
+                    return Err(MachineError::BadTrackerAddress(group.clone()));
+                }
+                self.settings.trackers.group = trial.group;
+            }
+            TrackerChange::Port { port } => {
+                if *port == 0 {
+                    return Err(MachineError::BadTrackerPort);
+                }
+                self.settings.trackers.port = *port;
+            }
+            TrackerChange::Axis { axis, from, invert } => {
+                self.settings.trackers.mapping.set_source(
+                    *axis,
+                    prism_domain::AxisSource {
+                        from: *from,
+                        invert: *invert,
+                    },
+                );
+            }
+            TrackerChange::Scale { scale } => {
+                let mut trial = self.settings.trackers.mapping;
+                trial.scale = *scale;
+                if !trial.is_valid() {
+                    return Err(MachineError::BadTrackerScale);
+                }
+                self.settings.trackers.mapping.scale = *scale;
+            }
+            TrackerChange::Offset { offset } => {
+                let mut trial = self.settings.trackers.mapping;
+                trial.offset = *offset;
+                if !trial.is_valid() {
+                    return Err(MachineError::BadTrackerOffset);
+                }
+                self.settings.trackers.mapping.offset = *offset;
+            }
+            TrackerChange::Timeout { milliseconds } => {
+                self.settings.trackers.timeout_ms = (*milliseconds).clamp(
+                    *prism_domain::TIMEOUT_RANGE_MS.start(),
+                    *prism_domain::TIMEOUT_RANGE_MS.end(),
+                );
+            }
         }
         Ok(())
     }

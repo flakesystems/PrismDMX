@@ -210,6 +210,23 @@ impl MergePlan {
                     home: def.default_value,
                 });
             }
+            // **The other slot with no channel - S32.** A head that can be aimed
+            // gets a `Follow` value from the desk, resting at nought: how far
+            // it follows its tracker. Decided by the profile alone, so
+            // assigning a tracker later is not a repatch.
+            if fixture_type.can_follow() {
+                if slots.len() == MAX_SLOTS {
+                    return Err(MergeError::TooManySlots(MAX_SLOTS + 1));
+                }
+                slots.push(AttributeSlot {
+                    fixture,
+                    attribute: AttributeType::Follow,
+                    occurrence: 0,
+                    merge_mode: AttributeType::Follow.default_merge_mode(),
+                    feature_group: FeatureGroup::Position,
+                    home: 0,
+                });
+            }
         }
         slots.sort_unstable_by_key(|slot| (slot.fixture, slot.attribute, slot.occurrence));
         Ok(Self {

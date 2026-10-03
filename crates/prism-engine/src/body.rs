@@ -34,6 +34,7 @@ use prism_domain::{Fixture, FixtureType, Group, PlaybackId, ProgrammerState, Seq
 use crate::command::TickCommand;
 use crate::cue::{CueError, SequencePlan};
 use crate::encode::{ChannelPlan, PatchError};
+use crate::follow::FollowLayer;
 use crate::frame::{DmxFrame, FrameLayout};
 use crate::master::MasterLayer;
 use crate::plan::MergePlan;
@@ -55,6 +56,7 @@ pub struct MergeBody {
     channels: ChannelPlan,
     layer: PlaybackLayer,
     cues: CueLayer,
+    follow: FollowLayer,
     programmer: ProgrammerLayer,
     masters: MasterLayer,
     scratch: MergeScratch,
@@ -104,6 +106,7 @@ impl MergeBody {
             channels,
             layer,
             cues,
+            follow: FollowLayer::none(),
             programmer,
             masters,
             scratch,
@@ -322,8 +325,25 @@ impl MergeBody {
         &self.values
     }
 
-    /// Runs the stack: merge the playbacks, override with the programmer, scale
-    /// by the masters.
+    /// The follow layer - the heads that are pointed at a tracker (S32).
+    #[must_use]
+    pub const fn follow(&self) -> &FollowLayer {
+        &self.follow
+    }
+
+    /// Puts a follow layer on the body and hands back the one it replaces.
+    ///
+    /// Set-up work like [`Self::load_sequence`]: the layer was built against a
+    /// patch and is only meaningful against the plan of the body it joins. The
+    /// layer it replaces is returned so that it is dropped - freed - somewhere
+    /// other than the tick, and so that the new one can
+    /// [`inherit`](FollowLayer::inherit) where each head was pointing.
+    pub fn set_follow(&mut self, follow: FollowLayer) -> FollowLayer {
+        core::mem::replace(&mut self.follow, follow)
+    }
+
+    /// Runs the stack: merge the playbacks, follow the trackers, override with
+    /// the programmer, scale by the masters.
     ///
     /// `ARCHITECTURE_SPEC.md` §5 steps 4 to 6. Allocation-free — this is the
     /// tick's work, and the reason `render` is little more than a call to it.
@@ -331,6 +351,7 @@ impl MergeBody {
         let Self {
             plan,
             layer,
+            follow,
             programmer,
             masters,
             scratch,
@@ -338,6 +359,10 @@ impl MergeBody {
             ..
         } = self;
         layer.resolve(plan, scratch, values);
+        // **Between the playbacks and the programmer** (S32): a head follows
+        // over what the cues say about pan and tilt, and the operator's own
+        // hand - which `follow` reads and does not write - is above both.
+        follow.apply(values, programmer);
         programmer.apply(values);
         masters.apply(values);
     }
@@ -509,7 +534,7 @@ impl TickBody for MergeBody {
             }
             TickCommand::ClearProgrammer => self.programmer.clear_all(),
             // The host's business: it swaps bodies, a body does not.
-            TickCommand::AdoptBody => {}
+            TickCommand::AdoptBody | TickCommand::AdoptFollow => {}
         }
     }
 

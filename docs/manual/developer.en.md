@@ -164,13 +164,81 @@ Two rules hold it up, and both are load-bearing:
 ### The tick
 
 44 Hz, its own thread, its own priority. It takes no lock, waits for nothing and
-**makes no allocator call** — measured on ten paths, with an eleventh test that
+**makes no allocator call** — measured on eleven paths (the twelfth: heads
+following trackers, S32), with one more test that
 allocates on purpose so the probe cannot break silently. Everything that needs a
 `Vec` happens on the core thread and reaches the tick behind one atomic.
 
 Frames leave through a triple buffer, one subscriber per output driver. Adding
 or removing an output while the show runs costs the outputs that did not change
 **no tick and no frame**.
+
+### A tracker moves a head: PSN, and what the tick may know about it
+
+S32. A tracking system sends positions over UDP multicast; a head that has been
+given a tracker points at it. Four pieces, and the line between them is the point:
+
+```
+PSN datagram ─▶ TrackerReceiver ─▶ TrackerTable ─▶ FollowLayer (in the merge) ─▶ pan, tilt
+ prism_protocols::psn   (a thread)    one atomic     prism_engine                 on the cable
+```
+
+- **The receiver** (`prism_protocols::TrackerReceiver`, run by `prismd::tracking`)
+  decodes with `psn::decode` — no allocation, no panic, measured under a
+  hostile-datagram fuzz (`tests/psn_fuzz.rs`) — **maps** each position into show
+  space (`prism_domain::TrackerMapping`: PSN does not say which way is up) and
+  writes it to the table. Which network, which axes and the timeout are the
+  *machine's* (`TrackerSettings`, `MachineChange::Tracker`); a socket that will not
+  open degrades alone and says why.
+- **The table** (`prism_engine::TrackerTable`) is **one atomic word per tracker**:
+  three signed 21-bit counts of millimetres, packed. One word, not three, so a
+  reader can never see half of one update and half of the next — a seqlock would
+  repair that with a retry loop on the one thread that may not loop. It has no
+  clock and no timeout: a tracker that goes quiet **keeps its last position**,
+  which is exactly *hold, and do not jump*. Saying so is the daemon's
+  (`Core::poll_trackers`), from its own clock.
+- **The follow layer** (`prism_engine::FollowLayer`) runs **between the playbacks
+  and the programmer**. It is built on the core thread from the show — where each
+  head hangs, its tracker, its pan and tilt travel, which merge slots those are —
+  and handed to the tick whole; the tick does one aim (`prism_domain::aim`, the way
+  back from the viewer's `yoke`) per head and mixes it into pan and tilt by the
+  head's **Follow** value. What the programmer holds on an axis it leaves alone.
+- **`AttributeType::Follow` is a value with no channel**, the second after the
+  software dimmer (S43): `MergePlan::build` gives it to every fixture with a pan
+  and a tilt, `Show::attribute_def` answers for it, `ChannelPlan` never sees it. It
+  is in no profile and no export. It is a **fraction**, so a cue that turns it on
+  fades the head onto the performer; a cue that stores a pan or a tilt for a
+  following head lets it go (`CueTrack::enter` — the rule is in the fold, so the
+  engine, the query and a blocking cue agree).
+
+Rules this taught:
+
+- **Who follows whom is the show's; the tracking system is the machine's.**
+  `Fixture::follow` travels in the `.prism` file, `TrackerSettings` does not.
+- **A placement carries the tracker** (`FixturePlace::follow`), so *where a head
+  hangs* and *what it is aimed at from there* are one command and one Oops. It is
+  also why `PlaceFixtures` is no longer *never the engine's business*: placing a
+  head **with a tracker** answers `Effect::Refollow`; placing one without costs the
+  tick nothing, and `crates/prism-core/tests/placement.rs` still says so.
+- **A follow layer is swapped alone** (`TickCommand::AdoptFollow`,
+  `EngineThread::install_follow`). A whole new body would stop every running
+  playback in the middle of a show, and nothing about the patch changed; the test
+  is `assigning_a_tracker_does_not_stop_a_running_cue_list`, which reads
+  `TickHealth::swaps`.
+- **Hand-written decoder, again**: `crates/prismd/tests/ui_trackers.rs` writes
+  `Answer::Trackers`, a `MachineChanged` with tracker settings and the three
+  patch operations `PlaceFixtures` makes as bytes, and `ui/src/ipc/trackers.test.ts`
+  reads them — including a tracker's age of `u64::MAX`, the one integer a
+  JavaScript number cannot hold.
+- **A test of a machine setting cannot use `--mock-output`.** Outputs on the
+  command line make every machine command refuse
+  (`ConfiguredOnTheCommandLine`); use `--mock-devices` and `AddOutput` with a mock
+  output, as `crates/prismd/tests/tracking.rs` does.
+- **A new `MachineChange` costs stack in `prism-core`'s suite.** `Command`'s
+  value tree is at the budget `crate::wire::a_generated_wire_value_fits_in_a_test_thread`
+  measures, and eight tracker variants inline overflowed `tests/oops.rs`' stack.
+  The tracker settings are one variant carrying `TrackerChange`, generated
+  through a boxed strategy (`arb::a_tracker_change`).
 
 ### The 3D viewer asks the daemon for files and nothing else
 
@@ -593,8 +661,8 @@ When the enum does grow:
    Library corpus installed. There is no GDTF equivalent and there cannot be
    one, so a GDTF attribute added here is held by a unit test in
    `prism_core::library::gdtf::attributes` and nothing else — write it.
-5. Check the tick still allocates nothing, and whether the new shape deserves an
-   eleventh path in `tick_allocations.rs`.
+5. Check the tick still allocates nothing, and whether the new shape deserves a
+   path of its own in `tick_allocations.rs`.
 
 ---
 

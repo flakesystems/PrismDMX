@@ -412,6 +412,29 @@ static SOFTWARE_DIMMER: prism_domain::AttributeDef = prism_domain::AttributeDef 
     ranges: Vec::new(),
 };
 
+/// How far a head follows its tracker - S32. The desk's own, like
+/// [`SOFTWARE_DIMMER`] and for the same reasons: no channel, no file behind it,
+/// and the three answers the programmer needs - yes, nought, and the position
+/// bank.
+///
+/// A percentage on a fader, `0` to `100`: nought leaves pan and tilt to the cues
+/// and the programmer, a hundred puts the head on its tracker.
+static FOLLOW: prism_domain::AttributeDef = prism_domain::AttributeDef {
+    switched: None,
+    attribute: prism_domain::AttributeType::Follow,
+    label: None,
+    occurrence: 0,
+    feature_group: prism_domain::FeatureGroup::Position,
+    coarse_offset: 0,
+    fine_offset: None,
+    default_value: 0,
+    merge_mode: prism_domain::MergeMode::Ltp,
+    invert: false,
+    physical_from: 0.0,
+    physical_to: 100.0,
+    ranges: Vec::new(),
+};
+
 impl Show {
     /// An empty show: no profiles, no patch, nothing stored.
     #[must_use]
@@ -592,6 +615,13 @@ impl Show {
         {
             return Some(&SOFTWARE_DIMMER);
         }
+        // **And a head that can be aimed has a `Follow`** - S32, with the same
+        // answer the merge gives (`MergePlan::build` adds the matching slot).
+        if key == prism_domain::AttributeKey::first(prism_domain::AttributeType::Follow)
+            && fixture_type.can_follow()
+        {
+            return Some(&FOLLOW);
+        }
         fixture_type.attributes.iter().find(|def| def.key() == key)
     }
 
@@ -619,9 +649,16 @@ impl Show {
             }
             _ => None,
         };
+        // The follow value comes **last**, after the profile's own, so the bank
+        // lists the knobs the manufacturer wrote and then the desk's.
+        let follows = match fixture_type {
+            Some(fixture_type) if fixture_type.can_follow() => Some(&FOLLOW),
+            _ => None,
+        };
         supplied
             .into_iter()
             .chain(fixture_type.into_iter().flat_map(|it| it.attributes.iter()))
+            .chain(follows)
     }
 
     /// The universes the patch occupies, ascending and without repeats.
@@ -960,6 +997,7 @@ impl Show {
                 id,
                 position: fixture.position,
                 rotation: fixture.rotation,
+                follow: fixture.follow,
             })
     }
 
@@ -970,8 +1008,8 @@ impl Show {
     /// fixture named twice ends where its **last** place puts it, which is what
     /// applying the list in order would do.
     ///
-    /// **Not a patch.** Only `position` and `rotation` are written, each as a
-    /// `replace` of its own, and the patch revision does not move — where a
+    /// **Not a patch.** Only `position`, `rotation` and the tracker to follow
+    /// are written, each as an op of its own, and the patch revision does not move — where a
     /// fixture hangs changes no channel, so nothing the engine built from the
     /// patch is out of date. A place a fixture already has writes nothing.
     ///
@@ -1012,11 +1050,43 @@ impl Show {
                 )?);
                 fixture.rotation = place.rotation;
             }
+            if fixture.follow != place.follow {
+                let path = format!("{}/follow", pointer(FIXTURES, &key));
+                ops.push(match place.follow {
+                    // The member is absent while nobody follows, so *adding* it
+                    // is the first assignment and *replacing* it every one after.
+                    Some(target) => put(path, &target, fixture.follow.is_some())?,
+                    None => JsonPatchOp::Remove { path },
+                });
+                fixture.follow = place.follow;
+            }
         }
         if !ops.is_empty() {
             self.touch();
         }
         Ok(ops)
+    }
+
+    /// Whether a placement that has just been written touches what the follow
+    /// layer is built from - S32.
+    ///
+    /// True if it set or cleared a tracker, or moved or turned a head that
+    /// **has** one. Asked after the write, so a head whose tracker was just taken
+    /// away is told by the operation that removed it, and one that is still
+    /// following by the fixture. A placement of heads that follow nothing is
+    /// *not* the engine's business and costs the tick nothing - which
+    /// `prism-core`'s `tests/placement.rs` asserts.
+    #[must_use]
+    pub fn placement_reaches_follow(
+        &self,
+        fixtures: impl IntoIterator<Item = prism_domain::FixtureId>,
+        ops: &[JsonPatchOp],
+    ) -> bool {
+        ops.iter().any(|op| op.path().ends_with("/follow"))
+            || fixtures.into_iter().any(|id| {
+                self.fixture(id)
+                    .is_some_and(|fixture| fixture.follow.is_some())
+            })
     }
 
     /// Stores a group, replacing one with the same number.

@@ -75,6 +75,24 @@
 //! is full is a tick that has stopped — is the body taken at the next frame
 //! instead, so a rebuilt rig is never left waiting.
 //!
+//! # A follow layer is swapped alone - S32
+//!
+//! Giving a head a tracker, or moving a head that has one, changes what the
+//! follow layer knows and **nothing about the patch**, and a whole new body for
+//! it would stop every playback in the middle of a show. So
+//! [`EngineThread::install_follow`] leaves a `FollowLayer` in a hand-over of its
+//! own and queues [`TickCommand::AdoptFollow`], and the swap happens at that
+//! point in the queue for the reason a body's does. Three differences, each
+//! deliberate:
+//!
+//! - the new layer is told where the old one had every head pointing
+//!   (`FollowLayer::inherit`), so a head that is following does not start from
+//!   nowhere because somebody moved a different one;
+//! - **a rebuilt body discards a layer that was waiting**, because the body was
+//!   built from the show as it is now and the layer was built from the show as it
+//!   was; and
+//! - the frame is **not** blanked: nothing was unpatched.
+//!
 //! # Why the frame is blanked when a body arrives
 //!
 //! S4's encoder writes only the channels the patch covers, so a channel that is
@@ -88,8 +106,8 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use prism_engine::{
-    DmxFrame, Engine, FrameLayout, FramePublisher, FrameSubscriber, MergeBody, Producer,
-    SystemClock, TICK_HZ, TickBody, TickCommand, TickInfo,
+    DmxFrame, Engine, FollowLayer, FrameLayout, FramePublisher, FrameSubscriber, MergeBody,
+    Producer, SystemClock, TICK_HZ, TickBody, TickCommand, TickInfo,
 };
 
 use crate::log;
@@ -114,6 +132,12 @@ pub struct BodySwap {
     /// Set when the marker that says *swap here* could not be queued, so the
     /// next frame takes the body instead.
     unmarked: AtomicBool,
+    /// A rebuilt follow layer, waiting - S32.
+    follow_incoming: Mutex<Option<Box<FollowLayer>>>,
+    /// Follow layers the tick has finished with, to be freed on the core thread.
+    follow_retired: Mutex<Vec<FollowLayer>>,
+    follow_waiting: AtomicBool,
+    follow_unmarked: AtomicBool,
 }
 
 impl BodySwap {
@@ -126,6 +150,48 @@ impl BodySwap {
             *slot = Some(Box::new(body));
         }
         self.waiting.store(true, Ordering::Release);
+        // A follow layer built before this body was built from a show that has
+        // since changed, and the body carries one of its own.
+        self.discard_follow();
+    }
+
+    /// Leaves a rebuilt follow layer for the tick - S32. Replaces one that has
+    /// not been taken yet, for `offer`'s reason.
+    pub fn offer_follow(&self, layer: FollowLayer) {
+        if let Ok(mut slot) = self.follow_incoming.lock() {
+            *slot = Some(Box::new(layer));
+        }
+        self.follow_waiting.store(true, Ordering::Release);
+    }
+
+    fn discard_follow(&self) {
+        if let Ok(mut slot) = self.follow_incoming.lock() {
+            *slot = None;
+        }
+        self.follow_waiting.store(false, Ordering::Release);
+        self.follow_unmarked.store(false, Ordering::Release);
+    }
+
+    /// The tick's side: takes a waiting follow layer, if the slot is free this
+    /// instant. `try_lock`, for `take`'s reason.
+    fn take_follow(&self) -> Option<Box<FollowLayer>> {
+        if !self.follow_waiting.load(Ordering::Acquire) {
+            return None;
+        }
+        self.follow_unmarked.store(false, Ordering::Release);
+        let Ok(mut slot) = self.follow_incoming.try_lock() else {
+            return None;
+        };
+        let next = slot.take();
+        self.follow_waiting.store(false, Ordering::Release);
+        next
+    }
+
+    /// The tick's side: hands back the layer it has finished with.
+    fn retire_follow(&self, previous: FollowLayer) {
+        if let Ok(mut retired) = self.follow_retired.try_lock() {
+            retired.push(previous);
+        }
     }
 
     /// Whether a body is waiting to be taken.
@@ -137,6 +203,9 @@ impl BodySwap {
     /// Drops everything the tick has handed back. Called from the core thread.
     pub fn collect(&self) {
         if let Ok(mut retired) = self.retired.lock() {
+            retired.clear();
+        }
+        if let Ok(mut retired) = self.follow_retired.lock() {
             retired.clear();
         }
     }
@@ -254,20 +323,33 @@ impl DaemonBody {
             self.health.swaps.fetch_add(1, Ordering::Relaxed);
         }
     }
+
+    /// Takes a rebuilt follow layer if one is waiting - S32. Nothing is
+    /// blanked: no channel was unpatched.
+    fn adopt_waiting_follow(&mut self) {
+        if let Some(mut next) = self.swap.take_follow() {
+            next.inherit(self.body.follow());
+            let previous = self.body.set_follow(*next);
+            self.swap.retire_follow(previous);
+        }
+    }
 }
 
 impl TickBody for DaemonBody {
     fn apply(&mut self, command: TickCommand) {
-        if command == TickCommand::AdoptBody {
-            self.adopt_waiting_body();
-        } else {
-            self.body.apply(command);
+        match command {
+            TickCommand::AdoptBody => self.adopt_waiting_body(),
+            TickCommand::AdoptFollow => self.adopt_waiting_follow(),
+            other => self.body.apply(other),
         }
     }
 
     fn render(&mut self, tick: &TickInfo, frame: &mut DmxFrame) {
         if self.swap.unmarked.load(Ordering::Acquire) {
             self.adopt_waiting_body();
+        }
+        if self.swap.follow_unmarked.load(Ordering::Acquire) {
+            self.adopt_waiting_follow();
         }
         if self.blank_next_frame {
             frame.blackout();
@@ -383,10 +465,25 @@ impl EngineThread {
         }
     }
 
+    /// Hands a rebuilt follow layer to the tick, which takes it over at this
+    /// point in the command queue - S32. See the module documentation.
+    pub fn install_follow(&mut self, layer: FollowLayer) {
+        self.swap.offer_follow(layer);
+        if !self.send(TickCommand::AdoptFollow) {
+            self.swap.follow_unmarked.store(true, Ordering::Release);
+        }
+    }
+
     /// Whether a handed-over body has not been taken yet.
     #[must_use]
     pub fn install_pending(&self) -> bool {
         self.swap.is_pending()
+    }
+
+    /// Whether a handed-over follow layer has not been taken yet.
+    #[must_use]
+    pub fn follow_pending(&self) -> bool {
+        self.swap.follow_waiting.load(Ordering::Acquire)
     }
 
     /// Frees the bodies the tick has handed back. Called from the core thread,

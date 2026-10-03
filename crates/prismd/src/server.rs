@@ -531,6 +531,11 @@ impl Desk {
             // second opinion about something the daemon already holds both
             // halves of, which drifts the first time a port-address default
             // changes.
+            // S32's, and `ArtNetNodes`' shape one protocol along: the daemon
+            // holds a table its own thread keeps, and the question reads it.
+            // What the question adds is how many heads follow each tracker,
+            // which only the show can say.
+            Query::Trackers => core.trackers_answer(),
             Query::ArtNetNodes => {
                 let supervisor = core.outputs();
                 let table = supervisor.discovered();
@@ -729,6 +734,13 @@ impl Desk {
     /// this is not.
     pub fn poll_autosave(&self) -> Vec<Delta> {
         self.core().poll_autosave()
+    }
+
+    /// Says so when a followed tracker goes quiet or comes back - S32.
+    ///
+    /// Returned rather than broadcast, for `poll_autosave`'s reason.
+    pub fn poll_trackers(&self) -> Vec<Delta> {
+        self.core().poll_trackers()
     }
 }
 

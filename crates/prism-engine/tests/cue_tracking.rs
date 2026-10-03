@@ -81,6 +81,7 @@ fn fixture(id: u32) -> Fixture {
         invert_pan: false,
         invert_tilt: false,
         software_dimmer: true,
+        follow: None,
     }
 }
 

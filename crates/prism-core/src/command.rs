@@ -91,6 +91,17 @@ pub enum Effect {
     /// queued programmer command is stale as well, because the programmer is
     /// addressed by merge-plan slot (S6): watch [`Show::patch_revision`].
     Repatch,
+    /// What the follow layer is built from changed: a head was given a tracker or
+    /// had its tracker taken away, or a head that follows one was moved or
+    /// turned - S32.
+    ///
+    /// **Not a [`Self::Repatch`]**, and that is the point of it being its own
+    /// effect: a repatch rebuilds the merge body, which stops every playback, and
+    /// nothing about the *patch* changed. The daemon rebuilds the follow layer
+    /// alone and hands it to the tick (`prism_engine::TickCommand::AdoptFollow`),
+    /// so putting a head on a performer in the middle of a show does not stop the
+    /// cue list that is running.
+    Refollow,
     /// The groups changed: `MergeBody::load_groups` again.
     ///
     /// No command in `docs/IPC_PROTOCOL.md` §5 stores a group, so [`Show::apply`]
@@ -660,7 +671,15 @@ impl Show {
                     // Where they already were — `RenumberFixture`'s rule.
                     return Ok(Applied::default());
                 }
-                Ok(Applied::patch(ops))
+                let refollow = self.placement_reaches_follow(placements.iter().map(|p| p.id), &ops);
+                let mut applied = Applied::patch(ops);
+                if refollow {
+                    // The one placement that *is* the engine's business: a head
+                    // with a tracker points where it does because of where it
+                    // hangs. See `Effect::Refollow`.
+                    applied.effects.push(Effect::Refollow);
+                }
+                Ok(applied)
             }
             // The library is `ShowFile`'s, so this is validated as far as the
             // show can see it — which is not far: a key is a key. See
@@ -747,7 +766,7 @@ impl Show {
 
     /// Patches a fixture from the wire form of the command.
     ///
-    /// Repatching keeps the geometry and the inverts. `PatchFixture` carries
+    /// Repatching keeps the geometry, the inverts and the tracker. `PatchFixture` carries
     /// neither — S1 defined it as the five fields an operator supplies at patch
     /// time, with position, rotation and the inverts edited afterwards — so
     /// building a fresh [`Fixture`] from it would quietly move a moving head
@@ -762,14 +781,15 @@ impl Show {
         address: u16,
         software_dimmer: bool,
     ) -> Result<Applied, ShowError> {
-        let (position, rotation, invert_pan, invert_tilt) =
+        let (position, rotation, invert_pan, invert_tilt, follow) =
             self.fixture(id)
-                .map_or((Vec3::ZERO, Vec3::ZERO, false, false), |existing| {
+                .map_or((Vec3::ZERO, Vec3::ZERO, false, false, None), |existing| {
                     (
                         existing.position,
                         existing.rotation,
                         existing.invert_pan,
                         existing.invert_tilt,
+                        existing.follow,
                     )
                 });
         // **A fixture with no name is named after its type** — S57, punch-list
@@ -789,6 +809,7 @@ impl Show {
             rotation,
             invert_pan,
             invert_tilt,
+            follow,
         })?;
 
         let mut deltas = vec![Delta::ShowPatch { ops }];

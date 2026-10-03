@@ -172,6 +172,14 @@ pub trait ServerHandler: Send + Sync + 'static {
                 counters: prism_domain::ArtNetCounters::default(),
                 remedy: None,
             },
+            // And no receiver, which is the honest answer for a handler with no
+            // machine behind it (S32).
+            Query::Trackers => Answer::Trackers {
+                trackers: Vec::new(),
+                listening: false,
+                error: None,
+                rejected: 0,
+            },
             // And no cue list, so no rows. An empty list is the same shape a
             // sequence with no cues gives, which is what a handler with no show
             // honestly has (S48).

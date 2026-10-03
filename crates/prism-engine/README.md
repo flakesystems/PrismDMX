@@ -15,7 +15,7 @@ Nothing on that path takes a lock, allocates, or waits for anything else.
 
 **The tick makes no allocator call.** Not *few* — none, on every path, measured
 rather than argued: `tests/tick_allocations.rs` counts what the allocator was
-asked for on ten separate paths and asserts nought, with an eleventh test that
+asked for on eleven separate paths and asserts nought, with a twelfth test that
 deliberately allocates so the probe cannot be silently broken. A new path
 through the tick needs a new row in that file, or the claim stops being true
 without anything going red.
@@ -63,4 +63,6 @@ run beside it and the pair is the reading.
 Built in **S2–S6**. Changed since by S33 (`FrameEnrolment`: outputs come and go
 without costing the tick a frame), S45 (a playback belongs to the cue list),
 S48 (cue tracking, the ninth allocation-free path), S51 (the two crossfade
-modes) and S52 (a three-part merge key, and the tenth path). `PROGRESS.md` §2.
+modes), S52 (a three-part merge key, and the tenth path) and **S32** (the
+follow layer and the tracker table: heads pointed at a tracker, and the eleventh
+path). `PROGRESS.md` §2.

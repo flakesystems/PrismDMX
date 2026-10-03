@@ -8,12 +8,14 @@ import { finalShow } from "../testing/viewer-recording";
 import {
   BLANK,
   DEFAULT_SPACING,
+  NO_TRACKER,
   fieldsAreNumbers,
   fieldsOf,
   placeSet,
   placeSpread,
   readField,
   selectedFixtures,
+  trackerIsValid,
 } from "./place";
 import { rigOf } from "./rig";
 
@@ -70,5 +72,84 @@ describe("Spread", () => {
     // Everything else as the fixtures have it.
     expect(placed[0]?.position.y).toBe(6);
     expect(placed[1]?.rotation).toEqual({ x: 20, y: 0, z: 0 });
+  });
+});
+
+describe("a tracker to follow - S32", () => {
+  const chosen = () => selectedFixtures(rig, [1, 2]);
+
+  it("is left alone where the field is blank", () => {
+    // Neither fixture follows anything, and nothing was typed.
+    for (const place of placeSet(chosen(), BLANK)) {
+      expect(place).not.toHaveProperty("follow");
+    }
+  });
+
+  it("is given with the typed number and the offset that was typed over zero", () => {
+    const placed = placeSet(chosen(), { ...BLANK, tracker: "5", oy: "0,4" });
+    expect(placed.map((place) => place.follow)).toEqual([
+      { tracker: 5, offset: { x: 0, y: 0.4, z: 0 } },
+      { tracker: 5, offset: { x: 0, y: 0.4, z: 0 } },
+    ]);
+  });
+
+  it("is kept by a gesture that does not mention it, and an offset keeps the others", () => {
+    const following = rig.map((fixture) =>
+      fixture.id === 1
+        ? { ...fixture, follow: { tracker: 7, offset: { x: 0.1, y: 0.2, z: 0.3 } } }
+        : fixture,
+    );
+    const [first] = selectedFixtures(following, [1]);
+    // A drag moves the place and says nothing about the tracker: it stays.
+    expect(placeSet([first!], { ...BLANK, y: "9" })[0]?.follow).toEqual({
+      tracker: 7,
+      offset: { x: 0.1, y: 0.2, z: 0.3 },
+    });
+    // Typing one component of the offset changes that one.
+    expect(placeSet([first!], { ...BLANK, oy: "1" })[0]?.follow).toEqual({
+      tracker: 7,
+      offset: { x: 0.1, y: 1, z: 0.3 },
+    });
+    // And the tracker alone moves it to another performer, offset kept.
+    expect(placeSet([first!], { ...BLANK, tracker: "8" })[0]?.follow).toEqual({
+      tracker: 8,
+      offset: { x: 0.1, y: 0.2, z: 0.3 },
+    });
+  });
+
+  it("is taken away by a dash, and an offset alone does not give a fixture a tracker", () => {
+    const following = rig.map((fixture) => ({
+      ...fixture,
+      follow: { tracker: 3, offset: { x: 0, y: 0, z: 0 } },
+    }));
+    const [first] = selectedFixtures(following, [1]);
+    expect(placeSet([first!], { ...BLANK, tracker: NO_TRACKER })[0]).not.toHaveProperty("follow");
+    // Nobody follows anything, so there is no performer for an offset to be part of.
+    expect(placeSet(chosen(), { ...BLANK, oy: "1" })[0]).not.toHaveProperty("follow");
+  });
+
+  it("is a whole number from nought to the last tracker, or blank, or a dash", () => {
+    for (const good of ["", " ", "0", "1023", "-"]) {
+      expect(trackerIsValid(good), good).toBe(true);
+    }
+    for (const bad of ["1024", "-1", "1.5", "anna", "3 4"]) {
+      expect(trackerIsValid(bad), bad).toBe(false);
+    }
+    expect(fieldsAreNumbers({ ...BLANK, tracker: "9999" })).toBe(false);
+    expect(fieldsAreNumbers({ ...BLANK, tracker: "12", oy: "0.4" })).toBe(true);
+  });
+
+  it("starts the form from the tracker the first fixture has", () => {
+    const following = rig.map((fixture) =>
+      fixture.id === 2
+        ? { ...fixture, follow: { tracker: 4, offset: { x: 0, y: 0.5, z: 0 } } }
+        : fixture,
+    );
+    const fields = fieldsOf(following.find((fixture) => fixture.id === 2));
+    expect(fields).toMatchObject({ tracker: "4", ox: "0", oy: "0.5", oz: "0" });
+    expect(fieldsOf(following.find((fixture) => fixture.id === 1))).toMatchObject({
+      tracker: "",
+      oy: "",
+    });
   });
 });

@@ -105,7 +105,7 @@ pub enum ExitAction {
 /// which a **client** must not supply — a client that chose a token would be
 /// choosing this desk's password, and one that chose a CID would be able to give
 /// two desks the same one.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 #[serde(tag = "t", rename_all_fields = "camelCase")]
 pub enum MachineChange {
@@ -272,6 +272,28 @@ pub enum MachineChange {
         /// `true` to arm, `false` to give up on it.
         learning: bool,
     },
+    /// One setting of **how this machine listens for trackers** - S32.
+    ///
+    /// The tracking group is one variant carrying a [`crate::TrackerChange`], and
+    /// not eight variants of its own, for the reason `SurfaceBinding`'s action is
+    /// a short list: this enum is inside `Command::ConfigureMachine`, whose value
+    /// tree has already tipped `prism-core`'s `tests/oops.rs` over a debug test
+    /// thread's stack twice (S38), and eight more variants cost about five
+    /// kilobytes of it. The inner enum is generated through a boxed strategy, so
+    /// what is paid is one slot.
+    ///
+    /// **One field at a time** all the same, which is this enum's rule: every
+    /// [`crate::TrackerChange`] writes one field. They take effect on the spot -
+    /// the receiver is stopped and started again, which costs a tracker the second
+    /// it takes.
+    Tracker {
+        /// Which setting, and what to.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::a_tracker_change()")
+        )]
+        change: crate::TrackerChange,
+    },
 }
 
 impl MachineChange {
@@ -364,7 +386,7 @@ impl MachineOverride {
 /// are here rather than in a query because they change when a command changes
 /// them and at no other time — which is the same test `Delta::SurfaceChanged`
 /// passes and `Query::MidiPorts` fails.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "camelCase")]
 pub struct MachineSettings {
@@ -448,6 +470,12 @@ pub struct MachineSettings {
     #[serde(default = "unity_percent")]
     #[cfg_attr(any(test, feature = "proptest"), proptest(strategy = "10u16..=400"))]
     pub jog_sensitivity: u16,
+    /// How this machine listens for trackers - S32.
+    ///
+    /// `#[serde(default)]`: a daemon that predates PSN sends none and a client
+    /// that predates it never asks, and both mean *not listening*.
+    #[serde(default)]
+    pub trackers: crate::TrackerSettings,
     /// Which settings this run's command line is holding.
     #[cfg_attr(
         any(test, feature = "proptest"),
