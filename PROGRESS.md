@@ -5514,6 +5514,7 @@ machine data.** (3) **The split** — PSN now, OSC as S32b.
 | `cargo test --workspace` | ✅ exit 0 — **2 717 passed**, 0 failed, 23 ignored in the full run (2 612 before). Nine tests were added after that run had compiled and were run on their own, all green: six in `crates/prism-core/tests/placement.rs` (13 in the file), two in `patch.rs` (`prism-domain`'s lib is 362 tests and was run again after the last edit), and `the_command_line_puts_a_head_on_its_tracker` (`fixture 1 follow at 100` and `… at 0`, through a daemon) |
 | `cargo clippy --workspace --all-targets -- -D warnings` · `cargo fmt --all --check` · `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` | ✅ all three (clippy: `large_enum_variant` on `Delta`, `approx_constant` twice in a property written with `0.7071…`, one `field_reassign_with_default`, an unusual byte grouping and `% == 0`, and a doc list item; doc: two links to a private module and a type that was never named that) |
 | `ui`: `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build` | ✅ **1 076 tests in 82 files** (1 053 in 81 before); lint's six warnings are the existing `no-useless-escape` in two settings tests; the build is 1 150.12 kB of JS (315.02 kB gzipped) and 34.70 kB of CSS |
+| **CI** | ✅ pushed as `be442a4` and watched to the end: `ci.yml` run **37136146823** green on **all seven jobs** in 6 min 37 s (Linux gates and platform-neutral crates 6 m 33 s, UI 2 m 5 s, end-to-end 4 m 17 s, ARM64 cross-check 56 s, three web jobs), and `pages.yml` green. Nothing of this session ran on macOS or Linux before this run; the Linux job compiled `socket2`'s `SO_REUSEPORT` call and the platform-neutral tests ran there |
 | Playwright | ✅ **59 passed** in 5.2 minutes, 0 failed — `e2e/trackers.spec.ts`'s two among them, and the viewer's 64-universe test with the DMX Sheet open (telemetry 24.6 Hz, paint p99 0.30 ms). S64's flaky `settings.spec.ts` test passed this time |
 
 **What was not done, and is written down rather than claimed.** **No real
@@ -9525,7 +9526,7 @@ Spezifikation und ist an keiner echten Planerdatei geprüft** (§5, *Carried out
 S64*). Die Matrix wird seit S32 mit **zwölf** Stellen geschrieben (ein Seed fand
 bei 90,0018° einen Winkelfehler).
 
-**Zuerst:** `git status` und `git log` ansehen — **S32 liegt in lokalen Commits** (`git log`); ob und wann gepusht wird, entscheidet der Eigentümer (nach außen gerichtet), und ein CI-Lauf auf `master` gehört danach in §2.65. Danach, wenn der
+**Zuerst:** `git status` und `git log` ansehen — **S32 ist gepusht** (`be442a4`, CI-Lauf 37136146823 grün auf allen sieben Jobs, `pages.yml` grün). Danach, wenn der
 Eigentümer ein **Tracking-System** hat: das Rig-Test-Rig, ein Darsteller an der
 vorderen linken Ecke, die Liste unter *Settings → Trackers → Heard*, die Achsen
 zurechtrücken, einem Kopf den Tracker geben und gehen
