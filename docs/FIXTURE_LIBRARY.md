@@ -200,10 +200,16 @@ Eigentümers, bevor es gebaut wurde: sie **gehen nicht verloren**. Ein
 OFL-Profil hat keine GDTF-Datei, also schreibt das Pult eine
 (`library::gdtf::write`) aus dem Profil, das die Show eingebettet hat: Kanäle an
 ihren Stellen (16 Bit als zwei Offsets), Ruhewerte, physikalische Bereiche, die
-Bereichsnamen als `ChannelSet`s, ein Körper mit den Strahlen des Profils (oder
-der Kiste samt einem Strahl, die der Viewer für ein Profil ohne Gerät zeichnet).
-Was ein `FixtureType` nicht trägt, schreibt es nicht: keine 3D-Modelle, keine
-Gobo-Bilder. Ein Planer zeichnet solche Fixtures also schlichter.
+Bereichsnamen als `ChannelSet`s und ein **Gerät** aus GDTF-eigenen Primitiven:
+trägt das Profil einen Geometriebaum, wird er zurückgeschrieben, sonst das, was
+der Viewer dieses Pults für ein Profil ohne Gerät zeichnet — ein **Moving Head**
+(`Base`, eine `Yoke`-Achse, eine `Head`-Achse, ein `Beam`; Pan liegt auf dem
+Joch, Tilt auf dem Kopf), wenn irgendein Modus des Fixtures Pan oder Tilt hat,
+sonst eine `Conventional`-Kanne mit einem Strahl am Fuß. Ein Planer kann also
+das richtige Teil bewegen, und dieses Pult zeichnet einen Reimport wieder als
+Moving Head statt als Box. Was ein `FixtureType` nicht trägt, schreibt es nicht:
+keine 3D-Modelle, keine Gobo-Bilder; ein Knoten, dessen Modelldatei fehlt, wird
+zur Box seines Platzbedarfs. Ein Planer zeichnet solche Fixtures also schlichter.
 
 **Wo die Bibliothek das GDTF des Herstellers hat, kommt dieses hinein — Byte für
 Byte**, aber nur, wenn es genau die Modi zurückliest, die die Show eingebettet

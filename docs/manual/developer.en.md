@@ -537,7 +537,13 @@ and otherwise `library::gdtf::write` writes one from the show's profile. That is
 the owner's answer to *what happens to the Open Fixture Library's fixtures*:
 none has a GDTF, so every one is written, and `tests/rig_export.rs` puts **all
 2 871 modes of the installed corpus** through write and read-back and requires
-the same footprint and the same channels in the same places. The converse is a
+the same footprint and the same channels in the same places, and a moving head's
+pan on a yoke axis and tilt on a head axis. The device is `gdtf::write::tree`:
+the geometry tree a profile carries, written back (a node whose model file the
+profile cannot carry becomes the box of its room); for a profile with none the
+stand-in this desk's viewer draws (`ui/src/viewer/gl/primitives.ts`), in GDTF's
+own primitives and no files — so an exported OFL fixture reads back as a moving
+head rather than as a box that does not move. The converse is a
 rule too: a name the format does not number (`ColorAdd_R`) is written
 `ColorAdd_R2` for a second of a kind, and `attributes::of` reads it back — a
 published file never says it, so reading it cannot disagree with one. The matrix

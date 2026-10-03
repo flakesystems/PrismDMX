@@ -165,18 +165,206 @@ fn every_mode_a_show_uses_is_one_file() {
     assert_eq!(read[0].id, "acme-lighting/spot-5000/basic");
 }
 
+/// **The viewer's own stand-in, written as GDTF** (B65, second half): a profile
+/// with pan or tilt and no device of its own comes back as a moving head — base,
+/// a yoke axis, a head axis, a beam — and pan is on the yoke and tilt on the
+/// head, so a planner moves the right part and this desk's viewer draws the same
+/// head it drew before the export.
 #[test]
-fn a_profile_with_no_device_gets_the_box_and_beam_the_viewer_draws() {
-    let read = round_trip(&[&head()]);
+fn a_profile_with_pan_and_tilt_and_no_device_is_written_as_a_moving_head() {
+    let mut written = head();
+    written.attributes.push(def(AttributeType::Tilt, 7, None));
+    written.footprint = 8;
+    let read = round_trip(&[&written]);
     let physical = read[0].physical.as_ref().expect("a GDTF always has one");
+
+    let kinds: Vec<(&str, &str, Option<&str>)> = physical
+        .geometries
+        .iter()
+        .map(|g| (g.name.as_str(), g.kind.as_str(), g.primitive.as_deref()))
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            ("Base", "Geometry", Some("Base")),
+            ("Yoke", "Axis", Some("Yoke")),
+            ("Head", "Axis", Some("Head")),
+            ("Beam", "Beam", Some("Cylinder")),
+        ]
+    );
+    let parents: Vec<Option<u32>> = physical.geometries.iter().map(|g| g.parent).collect();
+    assert_eq!(parents, [None, Some(0), Some(1), Some(2)]);
+
+    // Pan turns the yoke and tilt the head; everything else is on the base.
+    let geometry = |offset: u16| {
+        physical
+            .channels
+            .iter()
+            .find(|channel| channel.offset == offset)
+            .and_then(|channel| channel.geometry.as_deref())
+            .map(str::to_owned)
+    };
+    assert_eq!(geometry(1).as_deref(), Some("Yoke"), "pan");
+    assert_eq!(geometry(7).as_deref(), Some("Head"), "tilt");
+    assert_eq!(geometry(0).as_deref(), Some("Base"), "dimmer");
+
+    // It hangs: the beam leaves downward from below the head.
     assert_eq!(physical.beams.len(), 1);
     let beam = &physical.beams[0];
     assert!(
         (beam.direction.y + 1.0).abs() < 1e-9,
         "straight down: {beam:?}"
     );
+    assert!(beam.position.y < -0.3, "under the base: {beam:?}");
     assert!((beam.beam_angle - 25.0).abs() < 1e-9);
-    assert!((physical.size.x - 0.3).abs() < 1e-9);
+    // The body is the base, as the viewer sizes it.
+    assert!((physical.size.x - 0.34).abs() < 1e-9);
+}
+
+/// What has no pan or tilt is a can with a beam out of its foot, not a box.
+#[test]
+fn a_profile_that_does_not_move_is_written_as_a_can() {
+    let written = profile(
+        "Fixed",
+        vec![
+            def(AttributeType::Dimmer, 0, None),
+            def(AttributeType::Red, 1, None),
+        ],
+    );
+    let read = round_trip(&[&written]);
+    let physical = read[0].physical.as_ref().expect("physical");
+    assert_eq!(physical.geometries.len(), 2);
+    assert_eq!(
+        physical.geometries[0].primitive.as_deref(),
+        Some("Conventional")
+    );
+    assert!(
+        physical.geometries.iter().all(|g| g.kind != "Axis"),
+        "nothing to turn"
+    );
+    let beam = &physical.beams[0];
+    assert!((beam.direction.y + 1.0).abs() < 1e-9);
+    assert!(
+        (beam.position.y + 0.15).abs() < 1e-9,
+        "at the foot: {beam:?}"
+    );
+}
+
+/// A tree that was written is a tree that is written again: a profile that came
+/// out of a GDTF keeps its geometry — names, kinds, places, axes, beams and the
+/// geometry every channel acts on — through another export.
+#[test]
+fn a_geometry_tree_the_profile_carries_is_written_back_as_it_was() {
+    let mut written = head();
+    written.attributes.push(def(AttributeType::Tilt, 7, None));
+    written.footprint = 8;
+    let once = round_trip(&[&written]).remove(0);
+    let twice = round_trip(&[&once]).remove(0);
+    let (a, b) = (once.physical.unwrap(), twice.physical.unwrap());
+    assert_eq!(a.geometries, b.geometries);
+    assert_eq!(a.beams, b.beams);
+    let geometries = |p: &FixturePhysical| -> Vec<(u16, Option<String>)> {
+        p.channels
+            .iter()
+            .map(|c| (c.offset, c.geometry.clone()))
+            .collect()
+    };
+    assert_eq!(geometries(&a), geometries(&b));
+}
+
+/// A turned node comes back turned the same way — the axes go out in the order
+/// the reader takes them in, which an identity matrix cannot tell.
+#[test]
+fn a_turned_geometry_comes_back_turned_the_same_way() {
+    let mut written = head();
+    let mut device = physical(Vec3::ZERO, Vec::new(), "");
+    // A quarter turn about GDTF's Z, in the reader's names for the axes.
+    device.geometries = vec![prism_domain::GeometryNode {
+        name: "Turned".to_owned(),
+        parent: None,
+        kind: "Geometry".to_owned(),
+        model: None,
+        primitive: Some("Cube".to_owned()),
+        size: Vec3 {
+            x: 0.2,
+            y: 0.4,
+            z: 0.1,
+        },
+        position: Vec3 {
+            x: 0.1,
+            y: -0.2,
+            z: 0.3,
+        },
+        x_axis: Vec3 {
+            x: 0.0,
+            y: 0.0,
+            z: 1.0,
+        },
+        y_axis: Vec3 {
+            x: 0.0,
+            y: 1.0,
+            z: 0.0,
+        },
+        z_axis: Vec3 {
+            x: -1.0,
+            y: 0.0,
+            z: 0.0,
+        },
+        beam: None,
+    }];
+    written.physical = Some(device.clone());
+    let read = round_trip(&[&written]);
+    let node = &read[0].physical.as_ref().unwrap().geometries[0];
+    let close = |a: Vec3, b: Vec3| {
+        (a.x - b.x).abs() < 1e-9 && (a.y - b.y).abs() < 1e-9 && (a.z - b.z).abs() < 1e-9
+    };
+    let was = &device.geometries[0];
+    assert!(close(node.x_axis, was.x_axis), "{:?}", node.x_axis);
+    assert!(close(node.y_axis, was.y_axis), "{:?}", node.y_axis);
+    assert!(close(node.z_axis, was.z_axis), "{:?}", node.z_axis);
+    assert!(close(node.position, was.position), "{:?}", node.position);
+}
+
+/// A node whose model file the profile cannot carry is written as the box of
+/// the room it took, so it is still a body and not a hole.
+#[test]
+fn a_model_that_is_not_carried_is_written_as_the_box_it_filled() {
+    let mut written = head();
+    let mut physical = physical(Vec3::ZERO, Vec::new(), "");
+    physical.geometries = vec![prism_domain::GeometryNode {
+        name: "Housing".to_owned(),
+        parent: None,
+        kind: "Geometry".to_owned(),
+        model: Some("housing".to_owned()),
+        primitive: None,
+        size: Vec3 {
+            x: 0.2,
+            y: 0.4,
+            z: 0.1,
+        },
+        position: Vec3::ZERO,
+        x_axis: Vec3 {
+            x: 1.0,
+            y: 0.0,
+            z: 0.0,
+        },
+        y_axis: Vec3 {
+            x: 0.0,
+            y: 1.0,
+            z: 0.0,
+        },
+        z_axis: Vec3 {
+            x: 0.0,
+            y: 0.0,
+            z: 1.0,
+        },
+        beam: None,
+    }];
+    written.physical = Some(physical);
+    let read = round_trip(&[&written]);
+    let node = &read[0].physical.as_ref().unwrap().geometries[0];
+    assert_eq!(node.primitive.as_deref(), Some("Cube"));
+    assert!((node.size.y - 0.4).abs() < 1e-9 && (node.size.x - 0.2).abs() < 1e-9);
 }
 
 /// The device the profile states is the device the file states: its size, and

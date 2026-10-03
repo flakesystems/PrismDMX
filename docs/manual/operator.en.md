@@ -385,8 +385,9 @@ Library one included, although that library has no GDTF at all: where the
 library holds the manufacturer's file and it is exactly what your show
 embedded, **that file** goes in unchanged — models and gobo pictures too. For
 everything else the desk writes a GDTF from your show's profile (channels,
-ranges, home values, size and beams as far as the profile knows them). Your
-planner draws those more plainly, with no 3D model. The desk then says how many
+ranges, home values and a device: a moving head with a yoke and a head if the
+fixture has pan or tilt, otherwise a can). Your planner draws those more plainly,
+with no 3D model, but can tell which part pan and tilt turn. The desk then says how many
 profiles were of which kind. A show with nothing patched writes no file.
 
 **3. Check that it arrives.** Open the *DMX Sheet*, pull the fixture to full,

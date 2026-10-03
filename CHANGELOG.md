@@ -30,8 +30,9 @@ Alle Versionen bisher sind **Vorabversionen**.
   andere — auch für jedes Fixture aus der Open Fixture Library, das kein GDTF
   hat — schreibt das Pult eines**, mit seinen Kanälen, Bereichen und
   Ruhewerten. Kein Fixture geht verloren; ein Planer zeichnet die geschriebenen
-  einfacher (ohne 3D-Modell und Gobo-Bilder). Das Pult sagt, wie viele von
-  welcher Art es waren.
+  einfacher (ohne 3D-Modell und Gobo-Bilder), aber als **Moving Head mit Joch und
+  Kopf**, wenn das Fixture Pan oder Tilt hat, sodass der Planer das richtige
+  Teil bewegen kann. Das Pult sagt, wie viele von welcher Art es waren.
 - **Rig importieren:** eine `.mvr` hängt ihre Fixtures jetzt auch **so, wie der
   Planer sie gedreht hat** — bisher nur an den Ort.
 - **Encoder:** die Encoder der Executor-Streifen am X-Touch **tun jetzt etwas**.

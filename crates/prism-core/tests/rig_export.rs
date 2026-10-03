@@ -131,6 +131,54 @@ fn every_open_fixture_library_profile_survives_being_written_as_gdtf() {
                     profile.mode, profile.footprint, read.footprint
                 ));
             }
+            // **The device the viewer would have drawn**: a fixture that pans or
+            // tilts is a moving head whose pan is on a yoke axis and whose tilt
+            // is on a head axis, and one that does not is a can with no axis.
+            // The device is the **fixture's**, whichever mode is patched: a head
+            // in its one-channel mode is still a head, so it is whether *any*
+            // mode of the fixture pans or tilts.
+            let moves = profiles.iter().any(|mode| {
+                mode.attributes.iter().any(|a| {
+                    matches!(
+                        a.attribute,
+                        prism_domain::AttributeType::Pan | prism_domain::AttributeType::Tilt
+                    )
+                })
+            });
+            if let Some(physical) = &read.physical {
+                let axes = physical
+                    .geometries
+                    .iter()
+                    .filter(|g| g.kind == "Axis")
+                    .count();
+                if axes != if moves { 2 } else { 0 } {
+                    lost.push(format!(
+                        "{manufacturer} {name} / {}: {axes} axes for a {} mode",
+                        profile.mode,
+                        if moves { "moving" } else { "fixed" }
+                    ));
+                }
+                for definition in &profile.attributes {
+                    let wanted = match definition.attribute {
+                        prism_domain::AttributeType::Pan => Some("Yoke"),
+                        prism_domain::AttributeType::Tilt => Some("Head"),
+                        _ => None,
+                    };
+                    let on = physical
+                        .channels
+                        .iter()
+                        .find(|c| c.offset == definition.coarse_offset)
+                        .and_then(|c| c.geometry.as_deref());
+                    if let Some(wanted) = wanted
+                        && on != Some(wanted)
+                    {
+                        lost.push(format!(
+                            "{manufacturer} {name} / {}: {:?} is on {on:?}, not {wanted}",
+                            profile.mode, definition.attribute
+                        ));
+                    }
+                }
+            }
             if places(read) != places(profile) {
                 let (a, b) = (places(profile), places(read));
                 let first = a.iter().zip(&b).find(|(x, y)| x != y);

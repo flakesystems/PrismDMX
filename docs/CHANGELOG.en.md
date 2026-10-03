@@ -31,8 +31,9 @@ Every version so far is a **pre-release**.
   goes in unchanged; **for everything else — every Open Fixture Library fixture,
   which has no GDTF — the desk writes one**, with its channels, ranges and home
   values. No fixture is lost; a planner draws the written ones more plainly
-  (no 3D model, no gobo pictures). The desk says how many of each kind there
-  were.
+  (no 3D model, no gobo pictures), but as a **moving head with a yoke and a
+  head** if the fixture has pan or tilt, so the planner can move the right part.
+  The desk says how many of each kind there were.
 - **Import a rig:** an `.mvr` now hangs its fixtures **facing the way the
   planner turned them**, not only at their place.
 - **Encoders:** the encoders of the executor strips on the X-Touch **now do

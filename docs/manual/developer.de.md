@@ -574,7 +574,14 @@ einen Footprint neben einer Datei mit einem anderen — und sonst schreibt
 Eigentümers auf *was wird aus den Fixtures der Open Fixture Library*: keines hat
 ein GDTF, also wird jedes geschrieben, und `tests/rig_export.rs` schickt **alle
 2 871 Modi des installierten Korpus** durch Schreiben und Zurücklesen und
-verlangt denselben Footprint und dieselben Kanäle an denselben Stellen. Die
+verlangt denselben Footprint und dieselben Kanäle an denselben Stellen, dazu bei einem
+Moving Head Pan auf einer Joch-Achse und Tilt auf einer Kopf-Achse. Das Gerät ist
+`gdtf::write::tree`: der Geometriebaum, den ein Profil trägt, zurückgeschrieben
+(ein Knoten, dessen Modelldatei das Profil nicht tragen kann, wird zur Box seines
+Platzbedarfs); für ein Profil ohne Baum das Stand-in, das der Viewer dieses Pults
+zeichnet (`ui/src/viewer/gl/primitives.ts`), in GDTF-eigenen Primitiven und ohne
+Dateien — ein exportiertes OFL-Fixture liest sich also als Moving Head zurück und
+nicht als Box, die sich nicht bewegt. Die
 Umkehrung ist ebenfalls eine Regel: ein Name, den das Format nicht nummeriert
 (`ColorAdd_R`), heißt für das zweite seiner Art `ColorAdd_R2`, und
 `attributes::of` liest ihn zurück — eine veröffentlichte Datei sagt das nie,

@@ -398,9 +398,10 @@ verloren**, auch keines aus der Open Fixture Library, obwohl es dort gar kein
 GDTF gibt: Wo die Bibliothek die Datei des Herstellers hat und sie genau dem
 entspricht, was Ihre Show eingebettet hat, kommt **diese Datei** unverändert
 hinein — mit Modellen und Gobo-Bildern. Für alles andere schreibt das Pult ein
-GDTF aus dem Profil Ihrer Show (Kanäle, Bereiche, Ruhewerte, Größe und Strahlen,
-soweit das Profil sie kennt). Ihr Planer zeichnet diese schlichter, ohne
-3D-Modell. Das Pult sagt danach, wie viele Profile von welcher Art es waren.
+GDTF aus dem Profil Ihrer Show (Kanäle, Bereiche, Ruhewerte und ein Gerät: ein
+Moving Head mit Joch und Kopf, wenn das Fixture Pan oder Tilt hat, sonst eine
+Kanne). Ihr Planer zeichnet diese schlichter, ohne 3D-Modell, kann aber Pan und
+Tilt dem richtigen Teil zuordnen. Das Pult sagt danach, wie viele Profile von welcher Art es waren.
 Eine Show ohne gepatchte Fixtures schreibt keine Datei.
 
 **3. Nachsehen, ob es ankommt.** *DMX Sheet* öffnen, das Fixture auf voll

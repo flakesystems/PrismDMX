@@ -14,8 +14,9 @@
 //! mode of it the show uses**: the channels of each mode in their places, each
 //! with its attribute, its home value, its physical range and its named ranges
 //! as `ChannelSet`s, a 16-bit channel as the two offsets GDTF writes it with —
-//! and a body with the beams the profile states, or the same box with one beam
-//! that the viewer draws for a profile with none.
+//! and a **device**: the geometry tree the profile carries, or — for a profile
+//! that says nothing about one — the moving head or can this desk's own viewer
+//! would draw, with pan on a yoke axis and tilt on a head axis (`tree`).
 //!
 //! It does **not** write what a [`FixtureType`] does not carry: 3D models, wheel
 //! pictures, a manufacturer's thumbnail. That is a deliberate floor and not a
@@ -32,10 +33,12 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
-use prism_domain::{AttributeDef, FeatureGroup, FixtureBeam, FixtureType, Vec3};
+use prism_domain::{AttributeDef, AttributeType, FeatureGroup, FixtureType};
 
 use super::attributes;
 use crate::library::zip::Writer;
+
+mod tree;
 
 /// What a model with no size of its own is drawn as, in metres — the viewer's
 /// own box for a profile that says nothing about the device.
@@ -43,9 +46,6 @@ const DEFAULT_BODY: f64 = 0.3;
 
 /// What a beam states when a profile has none of its own to carry, in degrees.
 const DEFAULT_BEAM_ANGLE: f64 = 25.0;
-
-/// The geometry every mode names.
-const BODY: &str = "Body";
 
 /// Writes the modes of one fixture as a `.gdtf`.
 ///
@@ -152,91 +152,14 @@ fn description(first: &FixtureType, modes: &[&FixtureType]) -> String {
     }
     xml.push_str("      </Attributes>\n    </AttributeDefinitions>\n");
 
-    // The body, and its beams.
-    let physical = first.physical.as_ref();
-    let size = physical
-        .map(|physical| physical.size)
-        .filter(|size| size.x > 0.0 && size.y > 0.0 && size.z > 0.0)
-        .unwrap_or(Vec3 {
-            x: DEFAULT_BODY,
-            y: DEFAULT_BODY,
-            z: DEFAULT_BODY,
-        });
-    // GDTF's Length is X, Width Y and Height Z, and its Z is this desk's height.
-    xml.push_str("    <Models>\n");
-    let _ = writeln!(
-        xml,
-        "      <Model Name=\"{BODY}\" Length=\"{}\" Width=\"{}\" Height=\"{}\" PrimitiveType=\"Cube\"/>",
-        number(size.x),
-        number(size.z),
-        number(size.y),
-    );
-    xml.push_str(
-        "      <Model Name=\"Beam\" Length=\"0.05\" Width=\"0.05\" Height=\"0.01\" PrimitiveType=\"Cylinder\"/>\n",
-    );
-    xml.push_str("    </Models>\n    <Geometries>\n");
-    let _ = writeln!(
-        xml,
-        "      <Geometry Name=\"{BODY}\" Model=\"{BODY}\" Position=\"{IDENTITY}\">"
-    );
-    let default_beam = [FixtureBeam {
-        name: "Beam".to_owned(),
-        position: Vec3 {
-            x: 0.0,
-            y: -size.y / 2.0,
-            z: 0.0,
-        },
-        direction: Vec3 {
-            x: 0.0,
-            y: -1.0,
-            z: 0.0,
-        },
-        beam_angle: DEFAULT_BEAM_ANGLE,
-        luminous_flux: 0.0,
-        color_temperature: 0.0,
-    }];
-    let beams: &[FixtureBeam] = match physical {
-        Some(physical) if !physical.beams.is_empty() => &physical.beams,
-        _ => &default_beam,
-    };
-    let mut names: Vec<String> = Vec::new();
-    for (index, beam) in beams.iter().enumerate() {
-        // Geometry names are unique in a file, and two pixels may share one.
-        let mut name = if beam.name.trim().is_empty() {
-            format!("Beam {}", index + 1)
-        } else {
-            beam.name.trim().to_owned()
-        };
-        while names.contains(&name) || name == BODY {
-            name = format!("{name} {}", index + 1);
-        }
-        names.push(name.clone());
-        let _ = writeln!(
-            xml,
-            "        <Beam Name=\"{}\" Model=\"Beam\" Position=\"{}\" LampType=\"LED\" \
-             PowerConsumption=\"0\" LuminousFlux=\"{}\" ColorTemperature=\"{}\" BeamAngle=\"{}\" \
-             FieldAngle=\"{}\" BeamRadius=\"0.025\" BeamType=\"Wash\" ColorRenderingIndex=\"100\"/>",
-            escape(&name),
-            beam_matrix(beam),
-            number(beam.luminous_flux.max(0.0)),
-            number(if beam.color_temperature > 0.0 {
-                beam.color_temperature
-            } else {
-                6000.0
-            }),
-            number(if beam.beam_angle > 0.0 {
-                beam.beam_angle
-            } else {
-                DEFAULT_BEAM_ANGLE
-            }),
-            number(if beam.beam_angle > 0.0 {
-                beam.beam_angle
-            } else {
-                DEFAULT_BEAM_ANGLE
-            }),
-        );
-    }
-    xml.push_str("      </Geometry>\n    </Geometries>\n");
+    // The device: a tree of geometries the channels are put on.
+    let moves = modes.iter().any(|mode| {
+        mode.attributes
+            .iter()
+            .any(|a| matches!(a.attribute, AttributeType::Pan | AttributeType::Tilt))
+    });
+    let tree = tree::tree_of(first, moves);
+    tree.write(&mut xml);
 
     // The modes.
     xml.push_str("    <DMXModes>\n");
@@ -250,13 +173,14 @@ fn description(first: &FixtureType, modes: &[&FixtureType]) -> String {
         seen.push(&mode.mode);
         let _ = writeln!(
             xml,
-            "      <DMXMode Name=\"{}\" Geometry=\"{BODY}\">\n        <DMXChannels>",
-            escape(&mode.mode)
+            "      <DMXMode Name=\"{}\" Geometry=\"{}\">\n        <DMXChannels>",
+            escape(&mode.mode),
+            escape(tree.root()),
         );
         let mut ordered: Vec<&AttributeDef> = mode.attributes.iter().collect();
         ordered.sort_by_key(|definition| definition.coarse_offset);
         for definition in ordered {
-            channel(&mut xml, definition);
+            channel(&mut xml, definition, tree.geometry_of(definition, first));
         }
         xml.push_str(
             "        </DMXChannels>\n        <Relations/>\n        <FTMacros/>\n      </DMXMode>\n",
@@ -267,7 +191,7 @@ fn description(first: &FixtureType, modes: &[&FixtureType]) -> String {
 }
 
 /// One `DMXChannel`.
-fn channel(xml: &mut String, definition: &AttributeDef) {
+fn channel(xml: &mut String, definition: &AttributeDef, geometry: &str) {
     let attribute = channel_attribute(definition);
     let offset = definition.fine_offset.map_or_else(
         || (definition.coarse_offset + 1).to_string(),
@@ -281,8 +205,9 @@ fn channel(xml: &mut String, definition: &AttributeDef) {
     let function = format!("{attribute} 1");
     let _ = writeln!(
         xml,
-        "          <DMXChannel DMXBreak=\"1\" Offset=\"{offset}\" Highlight=\"None\" Geometry=\"{BODY}\" \
-         InitialFunction=\"{BODY}_{attr}.{attr}.{function}\">",
+        "          <DMXChannel DMXBreak=\"1\" Offset=\"{offset}\" Highlight=\"None\" Geometry=\"{geometry}\" \
+         InitialFunction=\"{geometry}_{attr}.{attr}.{function}\">",
+        geometry = escape(geometry),
         attr = escape(&attribute),
         function = escape(&function),
     );
@@ -346,73 +271,6 @@ const fn feature_of(group: FeatureGroup) -> (&'static str, &'static str) {
         FeatureGroup::Focus => ("Focus", "Focus"),
         FeatureGroup::Control => ("Control", "Control"),
     }
-}
-
-/// GDTF's identity matrix, rows of four.
-const IDENTITY: &str = "{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}";
-
-/// A beam's `Position`: where it sits, and turned so that it leaves along
-/// `direction`.
-///
-/// GDTF's beam leaves along its geometry's **−Z** and its Z is this desk's
-/// height; the layout is the specification's, as `geometry::Matrix` reads it —
-/// four rows of four, the rotation as columns, the translation in the fourth
-/// entry of the first three.
-fn beam_matrix(beam: &FixtureBeam) -> String {
-    // Desk axes (x, height, depth) to GDTF's (x, depth, height).
-    let wanted = [beam.direction.x, beam.direction.z, beam.direction.y];
-    let length = wanted.iter().map(|part| part * part).sum::<f64>().sqrt();
-    let target = if length > 1e-9 && length.is_finite() {
-        [wanted[0] / length, wanted[1] / length, wanted[2] / length]
-    } else {
-        [0.0, 0.0, -1.0]
-    };
-    // A rotation taking −Z to `target`: Rodrigues, with the two parallel cases
-    // spelled out because the general formula divides by their sum.
-    let from = [0.0, 0.0, -1.0];
-    let cosine = from[0] * target[0] + from[1] * target[1] + from[2] * target[2];
-    let rotation: [[f64; 3]; 3] = if cosine > 1.0 - 1e-12 {
-        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
-    } else if cosine < -1.0 + 1e-12 {
-        // Straight up from straight down: half a turn about X.
-        [[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]]
-    } else {
-        let axis = [
-            from[1] * target[2] - from[2] * target[1],
-            from[2] * target[0] - from[0] * target[2],
-            from[0] * target[1] - from[1] * target[0],
-        ];
-        let factor = 1.0 / (1.0 + cosine);
-        let [x, y, z] = axis;
-        [
-            [
-                1.0 - factor * (y * y + z * z),
-                -z + factor * x * y,
-                y + factor * x * z,
-            ],
-            [
-                z + factor * x * y,
-                1.0 - factor * (x * x + z * z),
-                -x + factor * y * z,
-            ],
-            [
-                -y + factor * x * z,
-                x + factor * y * z,
-                1.0 - factor * (x * x + y * y),
-            ],
-        ]
-    };
-    let place = [beam.position.x, beam.position.z, beam.position.y];
-    let row = |index: usize| {
-        format!(
-            "{{{},{},{},{}}}",
-            number(rotation[index][0]),
-            number(rotation[index][1]),
-            number(rotation[index][2]),
-            number(place[index]),
-        )
-    };
-    format!("{}{}{}{{0,0,0,1}}", row(0), row(1), row(2))
 }
 
 /// The fixture's GUID — the one it came with where it has one, and one made

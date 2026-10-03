@@ -16,7 +16,8 @@
 //! Everything else — a profile from the **Open Fixture Library**, which has no
 //! GDTF of its own, a venue's hand-written one, or a GDTF the desk no longer has
 //! the file of — is **written** by [`crate::library::gdtf::write`]: its channels,
-//! ranges and defaults, and a plain body with the beams it states. **That is
+//! ranges and defaults, and a device (a moving head with its yoke and head axes, or
+//! a can) in GDTF's own primitives. **That is
 //! the owner's answer to *what happens to the OFL fixtures*: none is dropped,
 //! none is left out of the archive, and the report says how many were written
 //! rather than published.**
