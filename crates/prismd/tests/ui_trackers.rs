@@ -77,6 +77,10 @@ fn answer() -> ServerMessage {
             listening: true,
             error: None,
             rejected: 7,
+            datagrams: 4_210,
+            from: Some("192.168.2.40:51234".to_owned()),
+            interfaces: vec!["192.168.2.163".to_owned(), "10.0.0.5".to_owned()],
+            remedy: None,
         },
     }
 }

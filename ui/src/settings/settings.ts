@@ -375,6 +375,10 @@ export function trackerStatusText(
     readonly listening: boolean;
     readonly error: string | null;
     readonly rejected: number;
+    readonly datagrams: number;
+    readonly from: string | null;
+    readonly interfaces: readonly string[];
+    readonly remedy: string | null;
   } | null,
 ): string {
   if (heard === null) {
@@ -392,8 +396,18 @@ export function trackerStatusText(
     heard.rejected > 0
       ? ` ${String(heard.rejected)} datagram${heard.rejected === 1 ? "" : "s"} on the group were not PSN version 2.`
       : "";
+  // What the desk can say about the network, which is what an installer
+  // asks next: whether anything reached the socket, from where, and on which
+  // adapters it was looking.
+  const arrived =
+    heard.datagrams > 0
+      ? ` ${String(heard.datagrams)} datagram${heard.datagrams === 1 ? "" : "s"} arrived${heard.from === null ? "" : `, the last from ${heard.from}`}.`
+      : "";
+  const adapters =
+    heard.interfaces.length > 0 ? ` Joined on ${heard.interfaces.join(", ")}.` : "";
+  const remedy = heard.remedy === null ? "" : ` ${heard.remedy}`;
   if (heard.trackers.length === 0) {
-    return `Listening, and nothing has been heard yet.${rejected}`;
+    return `Listening, and nothing has been heard yet.${arrived}${rejected}${adapters}${remedy}`;
   }
   return `Listening. ${String(heard.trackers.length)} tracker${heard.trackers.length === 1 ? "" : "s"} heard.${rejected}`;
 }

@@ -568,12 +568,21 @@ async fn the_panel_is_answered_with_what_is_out_there_and_how_many_heads_follow_
         listening,
         error,
         rejected,
+        datagrams,
+        from,
+        ..
     } = daemon.desk().query(&prism_domain::Query::Trackers)
     else {
         panic!("a question about trackers was answered with something else")
     };
     assert!(listening, "{error:?}");
     assert_eq!(rejected, 0);
+    assert_eq!(datagrams, 2, "the info packet and the data packet");
+    assert_eq!(
+        from.as_deref(),
+        Some("10.0.0.9:56565"),
+        "the sender is named"
+    );
     let anna = trackers.iter().find(|t| t.id == 5).unwrap();
     assert_eq!(anna.name.as_deref(), Some("Anna"));
     assert_eq!(anna.followers, 1);

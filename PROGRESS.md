@@ -5530,6 +5530,48 @@ is. Nothing was run on macOS or Linux: the new code is platform-neutral except
 `SO_REUSEPORT` (`#[cfg(unix)]`, a `socket2` call the Linux CI job compiles).
 OSC is S32b.
 
+**The first rig (2026-10-03, the same day): a build of S32 beside a running
+OpenFollow, PSN output verified on that machine by other means, and nothing
+arrived.** The panel's status line had not been read when this was written, so
+the cause is **not known**; what was done is what could be done from here.
+
+- **The byte layout is OpenFollow's.** Its library (`pypsn`) was run to write a
+  data packet and an info packet (two trackers, names, system name) and the
+  bytes were put in `psn::tests::what_openfollows_library_writes_reads`: the
+  codec reads every position and name. So it is not the packet.
+- **The socket works on the development machine** against a real multicast
+  sender (a Python one on the same encoder): 235 datagrams, 235 positions.
+  Run once with the old join and once with the new one.
+- **Found, and changed: the join.** `listen_multicast` with no interface named
+  joined on `INADDR_ANY`, which is **the default-route adapter only** - on a
+  machine with Wi-Fi and a cable, or a lighting network and an office one, a
+  sender on the other card is never heard and nothing says so. It now joins on
+  **every IPv4 adapter** (`if-addrs`; an adapter that refuses is skipped, and
+  none at all falls back to `INADDR_ANY`). A named interface still means that
+  one alone. This is a **hypothesis** for the rig, the first of five: it can only
+  matter if the rig has more than one adapter.
+- **The panel says what the network is doing** (`Answer::Trackers` gains
+  `datagrams`, `from`, `interfaces`, `remedy`; the client reads no number it was
+  not told): every datagram that reached the socket, the last sender, the
+  adapters joined, and - after five seconds open with none - the daemon's own
+  list of what to check (the sender's address and port, which card it sends from,
+  the firewall's inbound UDP rule for `prismd.exe`, IGMP snooping without a
+  querier). `0` datagrams is *the network is not delivering*; datagrams with a
+  rising `rejected` is *something else is on the group*. The log carries the
+  adapters and the first sender too. Tests: `remedy` (4 s, 6 s, heard, closed,
+  never opened), `from` and `datagrams` asserted on the real receiver thread,
+  the panel text (2 tests), and the answer's fixture regenerated.
+- **`tests/psn_multicast.rs`** is an `#[ignore]`d listener on the real group:
+  `cargo test -p prism-protocols --test psn_multicast -- --ignored --nocapture`
+  (`PSN_INTERFACE`, `PSN_GROUP`, `PSN_PORT`). It sends nothing, so no test puts a
+  datagram on a network.
+- **Still the owner's to answer** (the ranked causes, in the order to try them):
+  *Settings → Trackers → Listen* ticked (it is off by default); what the status
+  line says now; the Windows Firewall's inbound rule for `prismd.exe` on the
+  lighting network's profile; whether OpenFollow is pinned to another interface
+  (its docs recommend the wired one); IGMP snooping with a querier on a managed
+  switch.
+
 ## 3. Coverage tracking
 
 Targets from `CLAUDE.md`: ≥ 85 % global, > 95 % on engine, programmer and protocols. Record **measured** figures only — leave blank until a run produces a number.

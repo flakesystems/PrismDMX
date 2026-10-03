@@ -67,6 +67,10 @@ interface Hearing {
   readonly listening: boolean;
   readonly error: string | null;
   readonly rejected: number;
+  readonly datagrams: number;
+  readonly from: string | null;
+  readonly interfaces: readonly string[];
+  readonly remedy: string | null;
 }
 
 /** The whole panel. */
@@ -363,6 +367,10 @@ function Heard({ machine }: { readonly machine: MachineSettings }) {
             listening: answer.listening,
             error: answer.error,
             rejected: answer.rejected,
+            datagrams: answer.datagrams,
+            from: answer.from,
+            interfaces: answer.interfaces,
+            remedy: answer.remedy,
           });
         }
       });

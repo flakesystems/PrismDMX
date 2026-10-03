@@ -68,6 +68,14 @@ pub struct TrackingView {
     pub error: Option<String>,
     /// What has been read and what was done with it.
     pub counters: TrackingCounters,
+    /// Where the last datagram came from.
+    pub last_from: Option<String>,
+    /// The adapters the group was joined on.
+    pub interfaces: Vec<String>,
+    /// Where the receiver listens, as `group:port` - for the remedy's words.
+    pub listening_on: String,
+    /// When the receiver opened, on this machine's clock.
+    pub opened: Option<Instant>,
     /// How long a tracker may be quiet before it reads as such.
     pub timeout: Duration,
 }
@@ -83,6 +91,37 @@ impl TrackingView {
             Some(at) if now.saturating_duration_since(at) <= self.timeout => TrackerHealth::Live,
             _ => TrackerHealth::Quiet,
         }
+    }
+
+    /// What to try when the socket is open and nothing at all has reached it,
+    /// or `None` while that is not the case.
+    ///
+    /// Five seconds is a hundred and fifty frames of a tracker sending at its
+    /// usual thirty to sixty a second, and about five of the one-a-second
+    /// info packets - long enough that silence is not a slow start.
+    #[must_use]
+    pub fn remedy(&self, now: Instant) -> Option<String> {
+        let opened = self.opened?;
+        if !self.listening
+            || self.counters.datagrams > 0
+            || now.saturating_duration_since(opened) < Duration::from_secs(5)
+        {
+            return None;
+        }
+        let adapters = if self.interfaces.is_empty() {
+            "the default adapter".to_owned()
+        } else {
+            self.interfaces.join(", ")
+        };
+        Some(format!(
+            "Nothing has reached {} in five seconds (joined on {adapters}). \
+             Check, in this order: that the tracking system is sending to this address \
+             and port; that it sends from an adapter on this machine's network, not \
+             another one; that Windows Firewall allows prismd.exe inbound UDP on \
+             this network - the one thing the system asks once and a service never \
+             shows; and, through a managed switch, that IGMP snooping has a querier.",
+            self.listening_on
+        ))
     }
 
     /// One tracker, by number.
@@ -236,6 +275,8 @@ impl Tracking {
         self.table.clear();
         *lock(&self.shared.view) = TrackingView {
             timeout: config.timeout,
+            listening_on: describe(config.listen),
+            opened: Some(Instant::now()),
             ..TrackingView::default()
         };
         self.shared.running.store(true, Ordering::Release);
@@ -338,10 +379,16 @@ fn run(
     log::info(
         "tracking",
         &format!(
-            "listening for trackers on {}",
+            "listening for trackers on {}, joined on {}",
             receiver
                 .local_addr()
-                .map_or_else(|| describe(listen), |address| address.to_string())
+                .map_or_else(|| describe(listen), |address| address.to_string()),
+            receiver
+                .joined_interfaces()
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
         ),
     );
     publish(&receiver, shared, true);
@@ -349,9 +396,24 @@ fn run(
     let mut last_publish = Instant::now();
     let mut heard = 0_usize;
     let mut announced = false;
+    let mut first = true;
     while shared.running.load(Ordering::Acquire) {
         let taken = receiver.service();
         let counters = receiver.counters();
+        // The first datagram, and where it came from: the line that says the
+        // network path works whatever the codec makes of what arrived.
+        if first && counters.datagrams > 0 {
+            first = false;
+            log::info(
+                "tracking",
+                &format!(
+                    "first datagram on the tracker address, from {}",
+                    receiver
+                        .last_from()
+                        .map_or_else(|| "an unknown sender".to_owned(), |from| from.to_string())
+                ),
+            );
+        }
         // Said once, because it is the line an installer needs and one line is
         // all it needs: nothing is reaching the receiver that is a position.
         if !announced && counters.rejected >= 8 && counters.positions == 0 {
@@ -429,6 +491,12 @@ fn publish<S: prism_protocols::UdpNode, C: prism_engine::Clock>(
     view.listening = listening;
     view.trackers = trackers;
     view.counters = receiver.counters();
+    view.last_from = receiver.last_from().map(|from| from.to_string());
+    view.interfaces = receiver
+        .joined_interfaces()
+        .iter()
+        .map(ToString::to_string)
+        .collect();
     view.timeout = receiver.config().timeout;
     if listening {
         view.error = None;
@@ -445,7 +513,7 @@ mod tests {
     use prism_protocols::psn::{encode_data, encode_info};
     use prism_protocols::{MockUdpNode, MockUdpNodeHandle, UdpNode};
 
-    use super::Tracking;
+    use super::{Tracking, TrackingView};
     use crate::discovery::SocketSource;
 
     /// A source that hands out one mock socket and keeps the handle.
@@ -484,7 +552,7 @@ mod tests {
         std::net::SocketAddr::from(([10, 0, 0, 9], 56_565))
     }
 
-    fn until(tracking: &Tracking, check: impl Fn(&super::TrackingView) -> bool) -> bool {
+    fn until(tracking: &Tracking, check: impl Fn(&TrackingView) -> bool) -> bool {
         for _ in 0..400 {
             if check(&tracking.view()) {
                 return true;
@@ -492,6 +560,53 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         false
+    }
+
+    /// **Silence is only reported once it is long enough to mean something**, and
+    /// only for a receiver that is open and has heard nothing at all.
+    #[test]
+    fn a_remedy_is_offered_after_five_quiet_seconds_and_never_otherwise() {
+        let start = std::time::Instant::now();
+        let view = TrackingView {
+            listening: true,
+            listening_on: "236.10.10.10:56565".to_owned(),
+            interfaces: vec!["192.168.2.163".to_owned()],
+            opened: Some(start),
+            ..TrackingView::default()
+        };
+        assert_eq!(
+            view.remedy(start + Duration::from_secs(4)),
+            None,
+            "too soon"
+        );
+        let text = view
+            .remedy(start + Duration::from_secs(6))
+            .expect("five seconds of silence has an answer");
+        assert!(text.contains("236.10.10.10:56565"), "{text}");
+        assert!(text.contains("192.168.2.163"), "{text}");
+        assert!(text.contains("Firewall"), "{text}");
+
+        let mut heard = view.clone();
+        heard.counters.datagrams = 1;
+        assert_eq!(
+            heard.remedy(start + Duration::from_secs(60)),
+            None,
+            "it arrives"
+        );
+        let mut closed = view.clone();
+        closed.listening = false;
+        assert_eq!(
+            closed.remedy(start + Duration::from_secs(60)),
+            None,
+            "not open"
+        );
+        let mut never = view;
+        never.opened = None;
+        assert_eq!(
+            never.remedy(start + Duration::from_secs(60)),
+            None,
+            "never opened"
+        );
     }
 
     #[test]

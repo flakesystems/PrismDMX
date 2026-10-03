@@ -1136,7 +1136,8 @@ type Answer =
   | { t: "ArtNetNodes"; nodes: ArtNetNodeInfo[]; listening: boolean; error: string | null;
       counters: ArtNetCounters; remedy: string | null }
   | { t: "Trackers"; trackers: SeenTracker[]; listening: boolean;      // S32
-      error: string | null; rejected: number }
+      error: string | null; rejected: number; datagrams: number;
+      from: string | null; interfaces: string[]; remedy: string | null }
   | { t: "SurfaceBindings"; controls: SurfaceControl[]; device: string;
       profile: string | null; revision: number; learning: boolean }
   | { t: "CueTracking"; sequenceId: SequenceId; cues: CueTrackingRow[] }
@@ -1371,6 +1372,18 @@ interface StorePreview {
 > *Quiet* — it is the row an installer is looking for. `listening` is read before
 > the list, and `error` says why the receiver is closed in the daemon's own words;
 > `rejected` counts datagrams on the group that were not PSN version 2.
+>
+> **The four fields after `rejected` say what the network path is doing**, which
+> is the question a tracker that "sends and is never seen" leaves: `datagrams`
+> counts **every** datagram that reached the socket, so `0` here is *nothing is
+> arriving on this machine* (the firewall, the adapter, the sender) and a count
+> beside a `rejected` that rises is *something arrives and is not PSN*; `from` is
+> the last sender as `address:port`; `interfaces` is the adapters the group was
+> joined on - **every IPv4 adapter when no interface is named**, because a
+> join on the system's default one hears nothing from a sender on the other
+> card of a machine with two; and `remedy` is the daemon's own sentence, set
+> only once the receiver has been open five seconds with `datagrams` still `0`
+> (`ArtNetNodes`' rule: a client's own sentence would say *check the tracker*).
 >
 > **`ArtNetNodes` is the variant S46 needed** *(S46)*. It answers **what is on
 > this network**, and it exists because `Health::Ok` on an Art-Net output has

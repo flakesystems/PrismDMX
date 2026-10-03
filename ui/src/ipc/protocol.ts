@@ -762,6 +762,12 @@ export function readAnswer(value: unknown, path: string): Answer {
         listening: asBoolean(field(record, "listening"), `${path}.listening`),
         error: readOptionalString(field(record, "error"), `${path}.error`),
         rejected: asNumber(field(record, "rejected"), `${path}.rejected`),
+        datagrams: asNumber(field(record, "datagrams"), `${path}.datagrams`),
+        from: readOptionalString(field(record, "from"), `${path}.from`),
+        interfaces: asArray(field(record, "interfaces"), `${path}.interfaces`).map((row, index) =>
+          asString(row, `${path}.interfaces[${index}]`),
+        ),
+        remedy: readOptionalString(field(record, "remedy"), `${path}.remedy`),
       };
     // S48. What every cue of one list **inherits**, which is the one thing a
     // cue sheet cannot work out for itself: folding the cues would be a second

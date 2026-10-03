@@ -494,7 +494,7 @@ verlangt hat, überrascht eine Firewall.
 |---|---|
 | **Group** | `236.10.10.10`, wohin PSN-Systeme senden, wenn man ihnen nichts anderes sagt. Eine Adresse, die **keine** Multicast-Gruppe ist, wird direkt abgehört — ein Tracker, der nur an diesen Rechner sendet |
 | **Port** | `56565`. Das Pult teilt ihn: ein Visualizer oder ein Media-Server auf demselben Rechner hört dieselben Pakete |
-| **Interface** | Die Adresse der Netzwerkkarte, auf der zugehört wird. **Ein Laptop mit WLAN und Lichtnetz ist genau dort, wo die Wahl des Systems falsch ist** — nennen Sie die Adresse der Lichtkarte (`192.168.1.20`) und lassen Sie das Feld nur auf einem Rechner mit einem Netz leer |
+| **Interface** | Die Adresse der Netzwerkkarte, auf der zugehört wird. Bleibt das Feld leer, tritt das Pult der Gruppe auf **jeder** IPv4-Netzwerkkarte des Rechners bei, sodass ein Sender im Lichtnetz gehört wird, auf welcher Karte er auch liegt. Nennen Sie eine Adresse (`192.168.1.20`), um nur auf dieser Karte zuzuhören — das ist richtig, wenn ein Visualisierer auf einer anderen Karte auf derselben Gruppe sendet |
 | **Quiet after, ms** | Wie lange ein Tracker nichts senden darf, bevor das Pult es sagt (standardmäßig 500). Es entscheidet, wann der Bediener **informiert** wird, nicht, was der Kopf tut: der Kopf eines stillen Trackers wird gehalten, wo er war |
 
 Die Statuszeile unter *Heard* sagt, ob der Empfänger offen ist und, wenn nicht,
@@ -503,6 +503,15 @@ Schnittstelle ist nicht an diesem Rechner. Daneben steht, wie viele Datagramme
 angekommen sind, die kein PSN Version 2 waren: ein Tracking-System, das „sendet“
 und nie gesehen wird, ist in neun von zehn Fällen diese Zahl, die hochzählt (ein
 anderes Protokoll, PSN Version 1 oder ein anderes System auf derselben Gruppe).
+
+**Kommt gar nichts an**, sagt die Zeile das und nennt, was zu prüfen ist. Sie sagt
+auch, auf welchen Karten der Gruppe beigetreten wurde, wie viele Datagramme
+irgendeiner Art angekommen sind und woher das letzte kam: null heißt, dass das
+Netz sie nicht an diesen Rechner liefert; eine Adresse, die nicht die des
+Tracking-Systems ist, heißt, dass etwas anderes auf der Gruppe sendet. Ohne das
+Pult hört `cargo test -p prism-protocols --test psn_multicast -- --ignored
+--nocapture` acht Sekunden lang zu und gibt jedes Datagramm aus
+(`PSN_INTERFACE=<Adresse>` nennt eine Karte).
 
 **Die Firewall** muss dieses Programm auf **UDP** hereinlassen, auf dem Profil des
 Lichtnetzes — dieselbe Regel, die Kapitel 5 für Art-Net-Antworten beschreibt. Eine

@@ -482,7 +482,7 @@ firewall.
 |---|---|
 | **Group** | `236.10.10.10`, which is where PSN systems send unless told otherwise. An address that is **not** a multicast group is listened on directly — a tracker that sends to this machine alone |
 | **Port** | `56565`. The desk shares it: a visualiser or a media server on the same machine hears the same packets |
-| **Interface** | The address of the network card to listen on. **A laptop with Wi-Fi and a lighting network is exactly where the system's choice is the wrong one** — name the lighting card's address (`192.168.1.20`) and leave it blank only on a machine with one network |
+| **Interface** | The address of the network card to listen on. Left blank, the desk joins the group on **every** IPv4 network card the machine has, so a sender on the lighting network is heard whichever card it is on. Name one (`192.168.1.20`) to listen on that card alone — which is what to do if a visualiser on another card sends on the same group |
 | **Quiet after, ms** | How long a tracker may send nothing before the desk says so (500 by default). It decides when the operator is **told**, not what the head does: a quiet tracker's head is held where it was |
 
 The status line under *Heard* says whether the receiver is open and, if it is
@@ -491,6 +491,15 @@ that is not on this machine. A datagram count beside it says how many arrived
 that were not PSN version 2: a tracking system that "sends" and is never seen is,
 nine times in ten, that number counting up (a different protocol, PSN version 1,
 or another system on the same group).
+
+**When nothing arrives at all**, the line says so and names what to check. It
+also says which cards the group was joined on, how many datagrams of any kind
+have arrived and where the last one came from: a count of zero is *the network
+does not deliver them to this machine*, and an address that is not the
+tracking system's is *something else is sending on the group*. To see it
+without the desk, `cargo test -p prism-protocols --test psn_multicast --
+--ignored --nocapture` listens for eight seconds and prints every datagram
+(`PSN_INTERFACE=<address>` names a card).
 
 **The firewall** has to let this program in on **UDP**, on the lighting
 network's profile — the same rule chapter 5 describes for Art-Net replies. A

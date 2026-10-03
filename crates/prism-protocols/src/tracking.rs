@@ -152,6 +152,8 @@ pub struct TrackerReceiver<S: UdpNode, C: Clock = SystemClock> {
     rows: Vec<TrackerRow>,
     /// What the system calls itself, once an info packet has said.
     system: Option<String>,
+    /// Where the last datagram came from.
+    last_from: Option<SocketAddr>,
     counters: TrackingCounters,
     buffer: Box<[u8; MAX_PACKET]>,
 }
@@ -185,6 +187,7 @@ impl<S: UdpNode, C: Clock> TrackerReceiver<S, C> {
             open: false,
             rows: Vec::new(),
             system: None,
+            last_from: None,
             counters: TrackingCounters::default(),
             buffer: Box::new([0; MAX_PACKET]),
         }
@@ -229,6 +232,18 @@ impl<S: UdpNode, C: Clock> TrackerReceiver<S, C> {
     #[must_use]
     pub fn local_addr(&self) -> Option<SocketAddr> {
         self.socket.local_addr()
+    }
+
+    /// Where the last datagram came from, once one has.
+    #[must_use]
+    pub const fn last_from(&self) -> Option<SocketAddr> {
+        self.last_from
+    }
+
+    /// The adapters the group was joined on.
+    #[must_use]
+    pub fn joined_interfaces(&self) -> Vec<Ipv4Addr> {
+        self.socket.joined_interfaces()
     }
 
     /// What has been sent and what was done with it.
@@ -296,7 +311,10 @@ impl<S: UdpNode, C: Clock> TrackerReceiver<S, C> {
             };
             match outcome {
                 Ok(None) => break,
-                Ok(Some((len, _from))) => taken += self.accept(len),
+                Ok(Some((len, from))) => {
+                    self.last_from = Some(from);
+                    taken += self.accept(len);
+                }
                 // One datagram too large for the buffer is rubbish, and the pass
                 // goes on: the next one in the queue may be a position.
                 Err(UdpError::Oversized) => {

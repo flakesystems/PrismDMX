@@ -179,6 +179,10 @@ pub trait ServerHandler: Send + Sync + 'static {
                 listening: false,
                 error: None,
                 rejected: 0,
+                datagrams: 0,
+                from: None,
+                interfaces: Vec::new(),
+                remedy: None,
             },
             // And no cue list, so no rows. An empty list is the same shape a
             // sequence with no cues gives, which is what a handler with no show

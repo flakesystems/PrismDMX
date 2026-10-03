@@ -1631,6 +1631,10 @@ describe("the Trackers panel", () => {
     listening: true,
     error: null,
     rejected: 0,
+    datagrams: 0,
+    from: null,
+    interfaces: [],
+    remedy: null,
     ...overrides,
   });
 
@@ -1746,6 +1750,34 @@ describe("the Trackers panel", () => {
     expect(screen.getByTestId("trackers-enabled")).toHaveProperty("checked", false);
     expect(screen.getByTestId("trackers-group")).toHaveProperty("value", "10.0.0.5");
     expect(screen.getByTestId("trackers-scale")).toHaveProperty("value", "1");
+  });
+
+  it("says what reached the socket, and what to try when nothing has", async () => {
+    const { openPanel, answerQuery } = await desk();
+    openPanel("trackers");
+    await answerQuery(
+      "Trackers",
+      heard({
+        interfaces: ["192.168.2.163", "10.0.0.5"],
+        remedy: "Nothing has reached 236.10.10.10:56565 in five seconds.",
+      }),
+    );
+    const silent = screen.getByTestId("trackers-status").textContent ?? "";
+    expect(silent).toContain("Joined on 192.168.2.163, 10.0.0.5.");
+    expect(silent).toContain("Nothing has reached 236.10.10.10:56565");
+    expect(silent).not.toContain("arrived");
+  });
+
+  it("says that datagrams arrived, and from where, when none of them is a tracker", async () => {
+    const { openPanel, answerQuery } = await desk();
+    openPanel("trackers");
+    await answerQuery(
+      "Trackers",
+      heard({ datagrams: 12, from: "192.168.2.40:51234", rejected: 12 }),
+    );
+    const arrived = screen.getByTestId("trackers-status").textContent ?? "";
+    expect(arrived).toContain("12 datagrams arrived, the last from 192.168.2.40:51234.");
+    expect(arrived).toContain("12 datagrams on the group were not PSN");
   });
 
   it("asks what is out there while it is open, and says it is listening before it lists", async () => {

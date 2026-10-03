@@ -411,6 +411,57 @@ mod tests {
         );
     }
 
+    /// **A packet a real sender wrote.** OpenFollow (openfollow.app) builds its
+    /// packets with the `pypsn` library; these bytes are what `pypsn`'s encoder
+    /// writes for two trackers - all seven chunks of a tracker, timestamp and
+    /// status included - and for the info packet naming them. Written by the
+    /// library, not by `encode_data`, so the decoder is held to somebody else's
+    /// idea of the format.
+    #[test]
+    fn what_openfollows_library_writes_reads() {
+        const DATA: &str = "5567e48000000c80e703000000000000020305010100d0800100648000000c800000c03f000000c00000504001000c8000000000000000000000000002000c80000000000000000000000000030004800000803f04000c8000000000000000000000000005000c80000000000000000000000000060008807b000000000000000700648000000c80000020410000a0410000f04101000c8000000000000000000000000002000c80000000000000000000000000030004800000803f04000c8000000000000000000000000005000c80000000000000000000000000060008807b00000000000000";
+        const INFO: &str = "5667398000000c80e7030000000000000203050101000a804f70656e466f6c6c6f77020017800100088000000480416e6e61070007800000038042656e";
+        let bytes = |hex: &str| -> Vec<u8> {
+            (0..hex.len())
+                .step_by(2)
+                .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).unwrap())
+                .collect()
+        };
+        let data = bytes(DATA);
+        let mut found = Vec::new();
+        decode(&data, &mut |event| found.push(event)).unwrap();
+        assert_eq!(
+            found,
+            vec![
+                Event::Position {
+                    tracker: 1,
+                    position: [1.5, -2.0, 3.25]
+                },
+                Event::Position {
+                    tracker: 7,
+                    position: [10.0, 20.0, 30.0]
+                },
+            ]
+        );
+        let info = bytes(INFO);
+        let mut named = Vec::new();
+        decode(&info, &mut |event| named.push(event)).unwrap();
+        assert_eq!(
+            named,
+            vec![
+                Event::System("OpenFollow"),
+                Event::Name {
+                    tracker: 1,
+                    name: "Anna"
+                },
+                Event::Name {
+                    tracker: 7,
+                    name: "Ben"
+                },
+            ]
+        );
+    }
+
     #[test]
     fn chunks_it_does_not_know_are_skipped_by_their_length() {
         let mut packet = encode_data(0, 0, &[(3, [1.0, 1.0, 1.0])]);

@@ -20,6 +20,13 @@ prism-engine = { path = "../prism-engine" }
 # async runtime, so it adds no new code to the build.
 socket2 = { version = "0.6", features = ["all"] }
 
+# **Which adapters this machine has** - S32. A multicast group is joined *on an
+# interface*, and "the operating system's choice" is the default-route adapter,
+# which on a lighting PC with Wi-Fi and a cable is routinely not the one a
+# tracking system sends on. With no interface named, the receiver joins on every
+# IPv4 adapter; this is the safe way to list them on Windows, macOS and Linux.
+if-addrs = "0.15"
+
 # The two Windows access paths of ARCHITECTURE_SPEC.md §7.1, and the only
 # platform-specific dependencies in the workspace. Declared per target so the
 # Linux test job and the ARM64 cross-check never see them: everything above

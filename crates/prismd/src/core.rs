@@ -1808,11 +1808,16 @@ impl Core {
             }
         }
         trackers.sort_by_key(|row| row.id);
+        let remedy = view.remedy(now);
         prism_domain::Answer::Trackers {
             trackers,
             listening: view.listening,
             error: view.error,
             rejected: view.counters.rejected,
+            datagrams: view.counters.datagrams,
+            remedy,
+            from: view.last_from,
+            interfaces: view.interfaces,
         }
     }
 

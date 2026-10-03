@@ -877,6 +877,35 @@ pub enum Answer {
         /// Datagrams read that were not PSN, or were damaged. A tracker that
         /// "sends" and is never seen is, nine times in ten, this counting up.
         rejected: u64,
+        /// Datagrams of any kind that reached the socket since it opened.
+        ///
+        /// **The number that tells *nothing is reaching this machine* from *what
+        /// arrives is not understood*** - `0` here and `rejected` also `0` is the
+        /// firewall, the interface or the sender; `rejected` counting up is a
+        /// different protocol on the group.
+        datagrams: u64,
+        /// Where the last datagram came from, as `address:port`, or `None` if
+        /// none has.
+        from: Option<String>,
+        /// The adapters the group was joined on, as addresses - empty while the
+        /// receiver is closed. With no interface named this is every IPv4
+        /// adapter the machine has.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(
+                strategy = "proptest::strategy::Strategy::boxed(crate::arb::small_vec::<String>(2))"
+            )
+        )]
+        interfaces: Vec<String>,
+        /// What to try when the receiver is open and nothing has arrived, in the
+        /// daemon's own words, or `None` - `ArtNetNodes`' rule: the obvious
+        /// sentence a client would write is *check the tracker*, and the tracker
+        /// is the one thing that is working.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        remedy: Option<String>,
     },
     /// The Art-Net nodes this desk has heard from — S46.
     ArtNetNodes {

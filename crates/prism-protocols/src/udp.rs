@@ -551,6 +551,13 @@ pub trait UdpNode: Send {
         Err(UdpError::Bind)
     }
 
+    /// The interfaces the group was joined on, once [`Self::listen_multicast`]
+    /// has succeeded - what a diagnostic prints, because *which adapter* is the
+    /// first question when a sender on the same machine is not heard.
+    fn joined_interfaces(&self) -> Vec<Ipv4Addr> {
+        Vec::new()
+    }
+
     /// Closes the socket. Infallible, for [`UdpSender::close`]'s reason.
     fn close(&mut self);
 }
@@ -586,6 +593,10 @@ impl<S: UdpNode + ?Sized> UdpNode for Box<S> {
         (**self).listen_multicast(group, port, interface)
     }
 
+    fn joined_interfaces(&self) -> Vec<Ipv4Addr> {
+        (**self).joined_interfaces()
+    }
+
     fn close(&mut self) {
         (**self).close();
     }
@@ -615,6 +626,7 @@ const MIN_READ_TIMEOUT: Duration = Duration::from_millis(1);
 /// in it, so the Linux CI job and the ARM64 cross-check test what Windows runs.
 #[derive(Debug, Default)]
 pub struct SystemUdpNode {
+    joined: Vec<Ipv4Addr>,
     socket: Option<UdpSocket>,
     /// The timeout currently set on the socket, so a loop asking for the same
     /// one every pass does not make a system call to say so.
@@ -626,6 +638,7 @@ impl SystemUdpNode {
     #[must_use]
     pub const fn new() -> Self {
         Self {
+            joined: Vec::new(),
             socket: None,
             timeout: None,
         }
@@ -727,16 +740,53 @@ impl UdpNode for SystemUdpNode {
                 port,
             )))
             .map_err(|_| UdpError::Bind)?;
-        socket
-            .join_multicast_v4(&group, &interface.unwrap_or(Ipv4Addr::UNSPECIFIED))
-            .map_err(|_| UdpError::Bind)?;
+        // **Which adapters** - S32. A group is joined *on an interface*. One that
+        // was named is the only one; none named is *every IPv4 adapter this
+        // machine has*, because the operating system's choice (the default
+        // route) is routinely not the adapter a tracking system sends on - a
+        // lighting PC with Wi-Fi and a cable is the ordinary case - and a
+        // receiver joined on the wrong one hears nothing, from the same room, in
+        // silence. A join that fails on one adapter (a disconnected one) is not
+        // a reason to give up on the rest.
+        let mut joined = Vec::new();
+        match interface {
+            Some(address) => {
+                socket
+                    .join_multicast_v4(&group, &address)
+                    .map_err(|_| UdpError::Bind)?;
+                joined.push(address);
+            }
+            None => {
+                let adapters = if_addrs::get_if_addrs().unwrap_or_default();
+                for adapter in adapters {
+                    if let std::net::IpAddr::V4(address) = adapter.ip()
+                        && !joined.contains(&address)
+                        && socket.join_multicast_v4(&group, &address).is_ok()
+                    {
+                        joined.push(address);
+                    }
+                }
+                if joined.is_empty() {
+                    socket
+                        .join_multicast_v4(&group, &Ipv4Addr::UNSPECIFIED)
+                        .map_err(|_| UdpError::Bind)?;
+                    joined.push(Ipv4Addr::UNSPECIFIED);
+                }
+            }
+        }
+        self.joined = joined;
         self.socket = Some(socket.into());
         Ok(())
+    }
+
+    fn joined_interfaces(&self) -> Vec<Ipv4Addr> {
+        self.joined.clone()
     }
 
     fn close(&mut self) {
         self.socket = None;
         self.timeout = None;
+        self.joined.clear();
     }
 }
 
