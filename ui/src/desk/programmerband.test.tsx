@@ -211,13 +211,13 @@ describe("taking a whole bank over", () => {
   it("is a right-click on the bank key, and it names every attribute on it", () => {
     const { taken } = band("Color", programmer());
     fireEvent.contextMenu(screen.getByTestId("bank-Position"));
-    expect(taken).toEqual([["Pan", "Tilt"]]);
+    expect(taken).toEqual([["Pan", "Tilt", "Follow"]]);
   });
 
   it("leaves out the ones that are already overriding", () => {
     const { taken } = band("Color", programmer([["Pan", 1000]]));
     fireEvent.contextMenu(screen.getByTestId("bank-Position"));
-    expect(taken).toEqual([["Tilt"]]);
+    expect(taken).toEqual([["Tilt", "Follow"]]);
   });
 
   it("names nothing at all when the whole bank is already overriding", () => {
@@ -226,6 +226,7 @@ describe("taking a whole bank over", () => {
       programmer([
         ["Pan", 1000],
         ["Tilt", 2000],
+        ["Follow", 0],
       ]),
     );
     fireEvent.contextMenu(screen.getByTestId("bank-Position"));

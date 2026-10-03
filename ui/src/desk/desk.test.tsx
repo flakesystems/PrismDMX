@@ -600,10 +600,11 @@ describe("paging the encoder bar", () => {
         expect(screen.getByTestId("encoder-page-up").hasAttribute("disabled")).toBe(true);
         expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(true);
 
-        // The Position bank has three attributes since S51 (B38) and this rig
-        // has two of them: only what the fixtures have is drawn.
+        // The Position bank has four attributes since S51 (B38) and S32 and this
+        // rig has three of them - no position speed: only what the fixtures have
+        // is drawn, and *Follow* is the desk's own for any head that can be aimed.
         session(store, { encoderBank: "Position" });
-        expect(drawn()).toEqual(["Pan", "Tilt"]);
+        expect(drawn()).toEqual(["Pan", "Tilt", "Follow"]);
         expect(screen.getByTestId("programmer-page").textContent).toBe("1/1");
         expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(true);
     });
@@ -750,15 +751,16 @@ describe("the encoder bar", () => {
         // position at all: the Position bank draws nothing.
         expect(screen.getByTestId("no-parameters")).not.toBeNull();
 
-        // The moving head does pan, and selecting it fills the bank — **two
-        // knobs and not three**, because the position-speed knob S51 added is
-        // one this head has not got.
+        // The moving head does pan, and selecting it fills the bank — **three
+        // knobs and not four**, because the position-speed knob S51 added is
+        // one this head has not got, and Follow (S32) is the desk's.
         for (const step of [12, 13, 14]) {
             answer(step);
         }
-        expect(screen.getByTestId("encoders").children.length).toBe(2);
+        expect(screen.getByTestId("encoders").children.length).toBe(3);
         expect(screen.getByTestId("encoder-Pan")).not.toBeNull();
         expect(screen.getByTestId("encoder-Tilt")).not.toBeNull();
+        expect(screen.getByTestId("encoder-Follow")).not.toBeNull();
     });
 
     it("draws no knob at all for a parameter the selection has not got", () => {

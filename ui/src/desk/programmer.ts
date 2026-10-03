@@ -571,10 +571,46 @@ function attributeDefs(show: JsonValue | null, fixture: number): readonly JsonVa
   if (attributes === null) {
     return [];
   }
-  return suppliedIntensity(show, fixture, attributes)
+  const supplied = suppliedIntensity(show, fixture, attributes)
     ? [SUPPLIED_DIMMER, ...attributes]
     : attributes;
+  // The follow value comes last, after the profile's own, as it does in
+  // `prism_core::Show::attribute_defs`.
+  return canFollow(attributes) ? [...supplied, FOLLOW] : supplied;
 }
+
+/**
+ * Whether a head can be aimed - S32, and `FixtureType::can_follow`: a first
+ * pan and a first tilt. It depends on the profile alone, never on whether a
+ * tracker is assigned, so the knob is there for every head and which of them it
+ * does anything for is the show's business.
+ */
+function canFollow(attributes: readonly JsonValue[]): boolean {
+  const has = (attribute: string) =>
+    attributes.some(
+      (entry) =>
+        isObject(entry) &&
+        stringAt(entry, "/attribute") === attribute &&
+        (numberAt(entry, "/occurrence") ?? 0) === 0,
+    );
+  return has("Pan") && has("Tilt");
+}
+
+/**
+ * How far a head follows its tracker - S32, `prism_core::show::FOLLOW` as much
+ * of it as this side reads: the bank it is on and where it rests.
+ *
+ * **It has no channel, so a profile never lists it**, which is why the Position
+ * bank showed three knobs and no fourth until a head with a tracker was tried:
+ * the daemon had always answered for it (`Show::attribute_def`), and this list
+ * is the one the encoder band and the Fixture Sheet are drawn from.
+ */
+const FOLLOW: JsonValue = {
+  attribute: "Follow",
+  occurrence: 0,
+  featureGroup: "Position",
+  defaultValue: 0,
+};
 
 /**
  * The intensity the desk supplies to a fixture whose profile has none — S43.

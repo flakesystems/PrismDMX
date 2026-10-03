@@ -493,7 +493,8 @@ the colour bank has four knobs.
 **The *Position* bank has a fourth knob on every head that can be aimed**:
 *Follow*, how far the head follows its tracker (chapter 8). It is the desk's own
 and is in no profile; a fixture with a pan and a tilt has it and one without does
-not.
+not. It comes after pan, tilt and, on a head that has one, position speed - so it is
+the third knob on most heads and the fourth on those.
 
 **Every knob carries the name the manufacturer gave that channel** — *Rotating
 Gobo*, *Color Wheel 2* — and not the desk's generic word. Select two heads that

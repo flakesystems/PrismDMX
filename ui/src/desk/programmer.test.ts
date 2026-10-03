@@ -255,10 +255,11 @@ describe("what an encoder reads", () => {
     // Fixture 1 is a dimmer with no pan, so a Position bank over a mixed
     // selection has one fixture that can be panned and one that cannot.
     const readings = bankReadings(programmer([1, 5], [[5, "Pan", 16383]]), SHOW, "Position", 0);
-    // **Two, not three** — S52. The position bank has a speed knob on it since
-    // S51 (B38) and nothing selected has one, so it is not drawn: a bank shows
-    // what the fixtures have.
-    expect(readings.map((reading) => reading.attribute)).toEqual(["Pan", "Tilt"]);
+    // **Three, not four** — S52 and S32. The position bank has a speed knob on
+    // it since S51 (B38) and nothing selected has one, so it is not drawn: a bank
+    // shows what the fixtures have. A head that can be aimed has a *Follow*, which
+    // no profile lists and the desk supplies.
+    expect(readings.map((reading) => reading.attribute)).toEqual(["Pan", "Tilt", "Follow"]);
     expect(readings[0]?.available).toBe(1);
     expect(readings[0]?.held).toBe(1);
     expect(readings[1]?.available).toBe(1);
@@ -272,7 +273,9 @@ describe("what an encoder reads", () => {
     const of = (selection: number[], bank: Parameters<typeof bankParameters>[2]) =>
       bankParameters(programmer(selection), SHOW, bank, 0).map(parameterLabel);
     expect(of([1], "Dimmer")).toEqual(["Dimmer"]);
-    expect(of([5], "Position")).toEqual(["Pan", "Tilt"]);
+    expect(of([5], "Position")).toEqual(["Pan", "Tilt", "Follow"]);
+    // A dimmer cannot be aimed, so it has nothing to follow with.
+    expect(of([1], "Position")).toEqual([]);
     // **The head files its dimmer on the colour bank and the knob does not
     // move** — a distinction that predates S52. Which bank a knob is on is
     // `FEATURE_GROUP_ATTRIBUTES`; what a profile's own `featureGroup` decides

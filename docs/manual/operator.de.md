@@ -513,7 +513,9 @@ einen vierfarbigen PAR aus, hat die Farbbank vier Knöpfe.
 **Die Bank *Position* hat an jedem Kopf, der sich ausrichten lässt, einen
 vierten Knopf**: *Follow*, wie weit der Kopf seinem Tracker folgt (Kapitel 8).
 Er gehört dem Pult selbst und steht in keinem Profil; ein Fixture mit Pan und
-Tilt hat ihn, eines ohne nicht.
+Tilt hat ihn, eines ohne nicht. Er steht nach Pan, Tilt und, wo der Kopf eine hat,
+der Positionsgeschwindigkeit - an den meisten Köpfen also als dritter Knopf, an
+diesen als vierter.
 
 **Jeder Knopf trägt den Namen, den der Hersteller diesem Kanal gegeben hat** —
 *Rotating Gobo*, *Color Wheel 2* — und nicht das Allgemeinwort des Pults. Wählen

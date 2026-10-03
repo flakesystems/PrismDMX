@@ -5582,6 +5582,17 @@ the cause is **not known**; what was done is what could be done from here.
   with a clock that moves, and the real run reads 0 quiet samples and 0 changes
   of state in 60 s. This is not the first finding's cause: that machine has one
   adapter, so the join-on-every-adapter change did nothing for it.
+- **Third finding, the same evening: "the Position bank has no fourth knob".**
+  The manual said Follow was a knob of the Position bank and the desk's Rust side
+  answered for it (`Show::attribute_def` and `attribute_defs` supply it to any
+  head with a pan and a tilt), but the interface builds the bank from its own
+  reading of the show document (`attributeDefs` in `desk/programmer.ts`), which
+  knew S43's supplied dimmer and not this one - so the encoder band and the
+  Fixture Sheet never drew it, and the jog wheel (Rust) and the screen (TypeScript)
+  disagreed about the bank. `FOLLOW` is supplied there now, after the profile's
+  own attributes and for a first pan plus a first tilt, as in Rust. Seven tests
+  that said *Pan, Tilt* say *Pan, Tilt, Follow*; one asserts a dimmer has none.
+  The command line (`Fixture 1 Follow At 100`) had always worked.
 - **Still the owner's to answer** (the ranked causes, in the order to try them):
   *Settings → Trackers → Listen* ticked (it is off by default); what the status
   line says now; the Windows Firewall's inbound rule for `prismd.exe` on the
