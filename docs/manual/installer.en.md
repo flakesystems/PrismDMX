@@ -499,7 +499,10 @@ does not deliver them to this machine*, and an address that is not the
 tracking system's is *something else is sending on the group*. To see it
 without the desk, `cargo test -p prism-protocols --test psn_multicast --
 --ignored --nocapture` listens for eight seconds and prints every datagram
-(`PSN_INTERFACE=<address>` names a card).
+(`PSN_INTERFACE=<address>` names a card, `PSN_SECONDS` the time) and reports the
+longest silence - the number that says a Wi-Fi link drops multicast. `cargo test -p
+prismd --test tracking_real -- --ignored --nocapture` does the same through the
+desk's own receiver and counts how often a tracker flips between live and quiet.
 
 **The firewall** has to let this program in on **UDP**, on the lighting
 network's profile — the same rule chapter 5 describes for Art-Net replies. A

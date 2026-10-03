@@ -5565,6 +5565,23 @@ the cause is **not known**; what was done is what could be done from here.
   `cargo test -p prism-protocols --test psn_multicast -- --ignored --nocapture`
   (`PSN_INTERFACE`, `PSN_GROUP`, `PSN_PORT`). It sends nothing, so no test puts a
   datagram on a network.
+- **Second finding, the same day, on the owner's own PC (Wi-Fi, OpenFollow on a
+  Raspberry Pi by cable at 192.168.2.223): the connection "stands and keeps
+  dropping" - and that one was ours.** The bare socket hears it for seven
+  minutes with a longest silence of 139 ms (`psn_multicast`, `PSN_SECONDS=420`),
+  so the network was never the fault; the desk's own receiver, run on the same
+  network (`crates/prismd/tests/tracking_real.rs`, ignored), read the tracker as
+  *Quiet* in 394 of 524 samples with 3 063 positions received. `service()` read
+  up to 128 datagrams a pass and a tracker at sixty frames a second never leaves
+  the socket empty for the 40 ms the read waits, so a pass ran about two seconds
+  and the view was only published *between* passes. The table the tick reads was
+  always current, so the heads were not wrong - the panel, the health and the
+  quiet notice were. **No mock test could have seen it**, because a mock queue
+  empties. `TrackingConfig::pass` (20 ms) now ends a pass by the clock as well as
+  by the budget; `a_pass_ends_by_the_clock_while_datagrams_keep_coming` holds it
+  with a clock that moves, and the real run reads 0 quiet samples and 0 changes
+  of state in 60 s. This is not the first finding's cause: that machine has one
+  adapter, so the join-on-every-adapter change did nothing for it.
 - **Still the owner's to answer** (the ranked causes, in the order to try them):
   *Settings → Trackers → Listen* ticked (it is off by default); what the status
   line says now; the Windows Firewall's inbound rule for `prismd.exe` on the

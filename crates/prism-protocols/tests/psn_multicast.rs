@@ -11,8 +11,10 @@
 //! ```
 //!
 //! Set `PSN_GROUP`, `PSN_PORT` and `PSN_INTERFACE` to listen elsewhere. It
-//! listens for eight seconds and prints every datagram's source and what the
-//! codec made of it.
+//! listens for eight seconds (`PSN_SECONDS` changes that) and prints the first
+//! datagrams' source and what the codec made of it, then **the gaps**: the longest
+//! silence and how many were longer than 200 ms. That is the number that says a
+//! Wi-Fi link is dropping multicast, which a count alone does not.
 
 #![allow(
     clippy::print_stdout,
@@ -50,11 +52,25 @@ fn hears_a_sender_on_this_machine() {
 
     let mut buffer = [0_u8; psn::MAX_PACKET];
     let (mut datagrams, mut positions) = (0_u32, 0_u32);
-    let until = Instant::now() + Duration::from_secs(8);
+    let seconds: u64 = std::env::var("PSN_SECONDS")
+        .ok()
+        .and_then(|text| text.parse().ok())
+        .unwrap_or(8);
+    let start = Instant::now();
+    let until = start + Duration::from_secs(seconds);
+    let mut last = start;
+    let (mut longest, mut long_gaps) = (Duration::ZERO, 0_u32);
     while Instant::now() < until {
         let Ok(Some((len, from))) = node.recv_from(&mut buffer, Duration::from_millis(200)) else {
             continue;
         };
+        let gap = last.elapsed();
+        last = Instant::now();
+        longest = longest.max(gap);
+        if gap > Duration::from_millis(200) {
+            long_gaps += 1;
+            println!("gap of {gap:?} at {:?}", start.elapsed());
+        }
         datagrams += 1;
         let mut seen = Vec::new();
         let result = psn::decode(&buffer[..len], &mut |event| {
@@ -67,7 +83,9 @@ fn hears_a_sender_on_this_machine() {
             println!("{len} bytes from {from}: {result:?}, positions {seen:?}");
         }
     }
-    println!("{datagrams} datagrams, {positions} positions");
+    println!(
+        "{datagrams} datagrams, {positions} positions in {seconds} s; longest silence {longest:?}, {long_gaps} longer than 200 ms"
+    );
     assert!(
         datagrams > 0,
         "nothing arrived - see the notes in the manual"

@@ -82,6 +82,15 @@ pub struct TrackingConfig {
     /// Datagrams read in one pass before it ends, so that a flood cannot hold
     /// the thread inside one pass for ever.
     pub recv_budget: usize,
+    /// The longest one pass may keep reading while datagrams keep arriving.
+    ///
+    /// **This is what the budget alone does not bound.** A tracker sending sixty
+    /// frames a second never leaves the socket empty for longer than `wait`, so a
+    /// pass of 128 reads ran for two seconds and returned to a caller that
+    /// publishes what the receiver knows only *between* passes - the panel then
+    /// read a tracker that was sending steadily as quiet for most of every
+    /// second, on a real network, the first time one was connected.
+    pub pass: Duration,
     /// The most trackers the rows will hold.
     pub max_rows: usize,
 }
@@ -96,6 +105,7 @@ impl TrackingConfig {
             timeout,
             wait: Duration::from_millis(50),
             recv_budget: 128,
+            pass: Duration::from_millis(20),
             max_rows: usize::from(MAX_TRACKER) + 1,
         }
     }
@@ -304,7 +314,11 @@ impl<S: UdpNode, C: Clock> TrackerReceiver<S, C> {
         }
         let mut taken = 0;
         let wait = self.config.wait;
+        let started = self.clock.now();
         for _ in 0..self.config.recv_budget {
+            if self.clock.now().saturating_sub(started) >= self.config.pass {
+                break;
+            }
             let outcome = {
                 let Self { socket, buffer, .. } = self;
                 socket.recv_from(buffer.as_mut_slice(), wait)
@@ -441,7 +455,7 @@ mod tests {
     use std::time::Duration;
 
     use prism_domain::{TrackerHealth, TrackerMapping, Vec3};
-    use prism_engine::{ManualClock, TrackerTable};
+    use prism_engine::{Clock, ManualClock, TrackerTable};
 
     use super::{Listen, TrackerReceiver, TrackingConfig};
     use crate::psn::{encode_data, encode_info};
@@ -476,6 +490,56 @@ mod tests {
             group: GROUP,
             port: 56_565,
             interface: None,
+        }
+    }
+
+    /// A clock that moves a millisecond every time it is read, which is what a
+    /// pass that takes a while looks like to a test.
+    struct Ticking(std::sync::atomic::AtomicU64);
+
+    impl Clock for Ticking {
+        fn now(&self) -> Duration {
+            Duration::from_millis(self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+        }
+
+        fn sleep_until(&self, _deadline: Duration) {}
+    }
+
+    /// **A tracker that never stops sending must not keep the pass from ending.**
+    /// Found on the first real network: at sixty frames a second the socket is
+    /// never empty, so a pass bounded only by its budget ran for two seconds and
+    /// the view a panel reads was not published for as long.
+    #[test]
+    fn a_pass_ends_by_the_clock_while_datagrams_keep_coming() {
+        let socket = MockUdpNode::new();
+        let handle = socket.handle();
+        let table = Arc::new(TrackerTable::new());
+        let mut config = TrackingConfig::new(
+            multicast(),
+            TrackerMapping::default(),
+            Duration::from_millis(500),
+        );
+        config.pass = Duration::from_millis(10);
+        let mut receiver = TrackerReceiver::with_clock(
+            socket,
+            config,
+            Arc::clone(&table),
+            Ticking(std::sync::atomic::AtomicU64::new(0)),
+        );
+        receiver.open().unwrap();
+        for _ in 0..100 {
+            handle.deliver(FROM, &encode_data(0, 0, &[(1, [1.0, 2.0, 3.0])]));
+        }
+        let first = receiver.service();
+        assert!(
+            (1..100).contains(&first),
+            "one pass read {first} of 100 queued datagrams"
+        );
+        let mut total = first;
+        while total < 100 {
+            let more = receiver.service();
+            assert!(more > 0, "the rest is still there");
+            total += more;
         }
     }
 

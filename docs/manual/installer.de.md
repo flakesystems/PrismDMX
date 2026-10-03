@@ -511,7 +511,11 @@ Netz sie nicht an diesen Rechner liefert; eine Adresse, die nicht die des
 Tracking-Systems ist, heißt, dass etwas anderes auf der Gruppe sendet. Ohne das
 Pult hört `cargo test -p prism-protocols --test psn_multicast -- --ignored
 --nocapture` acht Sekunden lang zu und gibt jedes Datagramm aus
-(`PSN_INTERFACE=<Adresse>` nennt eine Karte).
+(`PSN_INTERFACE=<Adresse>` nennt eine Karte, `PSN_SECONDS` die Dauer) und nennt die
+längste Stille - die Zahl, an der man sieht, dass eine WLAN-Strecke Multicast
+verliert. `cargo test -p prismd --test tracking_real -- --ignored --nocapture`
+tut dasselbe durch den Empfänger des Pults und zählt, wie oft ein Tracker
+zwischen live und still wechselt.
 
 **Die Firewall** muss dieses Programm auf **UDP** hereinlassen, auf dem Profil des
 Lichtnetzes — dieselbe Regel, die Kapitel 5 für Art-Net-Antworten beschreibt. Eine
