@@ -5610,6 +5610,12 @@ the cause is **not known**; what was done is what could be done from here.
   daemon test that flips the tilt on the running desk and watches the byte go
   from 170 to 85 with pan untouched; 6 interface tests. Checked only against
   bytes and a drawing: **no real head has been compared** (§5).
+- **CI for the four rig commits** (`0b66c01`, `95b91d1`, `b0b3fc4`, `6d733f5`),
+  pushed on 2026-10-04 and watched to the end: `ci.yml` run **37206908742** green
+  on **all seven jobs** (Linux gates and platform-neutral crates 6 m 35 s, UI 1 m
+  26 s, end-to-end 3 m 30 s, ARM64 cross-check 53 s, three web jobs) and
+  `pages.yml` run 37206908717 green. Locally every gate had run in full first,
+  the whole workspace's tests and all 59 Playwright tests included.
 - **Still the owner's to answer** (the ranked causes, in the order to try them):
   *Settings → Trackers → Listen* ticked (it is off by default); what the status
   line says now; the Windows Firewall's inbound rule for `prismd.exe` on the
