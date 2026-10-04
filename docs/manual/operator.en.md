@@ -225,6 +225,18 @@ is being told, whatever told it: the programmer, a cue, a master.
   performer* in chapter 8). It is part of the same gesture: *Set* sends it with
   the place, a blank field keeps what each fixture has, and a dash takes the
   tracker away. Dragging a head that follows leaves it following.
+- **Runs the other way.** Two tick boxes, **Pan** and **Tilt**, for a head whose
+  motor turns the other way from the picture's - the beam in the viewer swings
+  left where the real head swings right. **No rotation puts that right**: a
+  rotation adds to the pan and turns the head's front, and turning a head over
+  mirrors it only by sending the beam the wrong way up. The boxes say so
+  directly. They change what the viewer **draws** and what a tracker is **aimed
+  at** - a head that follows is pointed through its mirror, so the real head
+  ends up on the performer - and **not one value on the cable**: a pan of 60 %
+  is still 60 %. It is *how the head is*, so it is in the show with the fixture,
+  sent with the place (one Oops) and kept when you correct its address. A
+  selection whose heads disagree shows the box half-filled; clicking it sets
+  every selected head.
 - **What the numbers mean.** Metres, measured from a point you choose — the
   middle of the stage front at floor level is a good one. **X** runs across the
   stage (positive is stage left, which is the audience's right), **Y** is height

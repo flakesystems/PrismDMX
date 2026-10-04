@@ -70,6 +70,7 @@ fn fixture(id: u32, name: &str, of: &FixtureType, universe: u32, address: u16) -
         rotation: Vec3::ZERO,
         invert_pan: false,
         invert_tilt: false,
+        mirror: Default::default(),
         software_dimmer: true,
         follow: None,
     }

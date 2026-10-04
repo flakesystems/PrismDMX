@@ -34,6 +34,11 @@
  * `invert` on a channel is applied because it is the *device* reading that
  * channel backwards. `Fixture::invertPan` is not: it is an operator's
  * convention, already on the cable, and the head moves as the cable says.
+ *
+ * **`Fixture::mirror` is applied, and is the third thing**: the head's motor runs
+ * the other way from the picture's, so the angle is negated *after* it is read
+ * off the cable. It changes the picture and what a tracker aims at, and not a
+ * byte on the cable.
  */
 
 import type { TelemetryFrameView } from "../telemetry/frame";
@@ -311,6 +316,14 @@ export function readLook(
       : placeholder(tilt)
         ? physical(channelValue(frame, index, fixture.address, tilt), -135, 135)
         : physical(channelValue(frame, index, fixture.address, tilt), tilt.from, tilt.to);
+  // A head whose motor runs the other way from the picture's (`Mirror`): the
+  // cable is as it is, and the beam is drawn where the real head puts it.
+  if (fixture.mirror.pan) {
+    into.pan = -into.pan;
+  }
+  if (fixture.mirror.tilt) {
+    into.tilt = -into.tilt;
+  }
   into.angle = zoomAngle(zoom, zoom === undefined ? 0 : channelValue(frame, index, fixture.address, zoom));
   into.present = true;
   return into;

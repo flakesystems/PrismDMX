@@ -188,6 +188,7 @@ fn desk_show() -> ShowFile {
             rotation: Vec3::ZERO,
             invert_pan: false,
             invert_tilt: false,
+            mirror: Default::default(),
         })
         .expect("the address is free");
     }
@@ -203,6 +204,7 @@ fn desk_show() -> ShowFile {
         rotation: Vec3::ZERO,
         invert_pan: false,
         invert_tilt: false,
+        mirror: Default::default(),
     })
     .expect("the address is free");
     show.patch_fixture(Fixture {
@@ -219,6 +221,7 @@ fn desk_show() -> ShowFile {
         rotation: Vec3::ZERO,
         invert_pan: false,
         invert_tilt: false,
+        mirror: Default::default(),
     })
     .expect("the address is free");
 

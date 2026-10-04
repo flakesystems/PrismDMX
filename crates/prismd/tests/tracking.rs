@@ -240,6 +240,7 @@ fn follow(daemon: &Daemon, tracker: Option<u16>) {
                     tracker,
                     offset: Vec3::ZERO,
                 }),
+                mirror: prism_domain::Mirror::default(),
             }],
         })
         .unwrap();
@@ -301,6 +302,58 @@ async fn a_tracker_moves_a_head_that_follows_it() {
         byte(&frames, 2).is_some_and(|pan| pan != 128)
     })
     .await;
+    daemon.shutdown().await;
+}
+
+/// **A head whose motor runs the other way is aimed the other way** - the
+/// operator's own report, on a head standing on the floor. Flipping the tilt on
+/// the running desk swaps the follow layer alone and the same performer now puts
+/// the head at the mirror of the angle, which is what makes the real head, whose
+/// motor runs backwards, point at them.
+#[tokio::test]
+async fn a_mirrored_tilt_aims_the_head_the_other_way_on_the_running_desk() {
+    let _turn = common::one_daemon_at_a_time();
+    let dir = tempfile::tempdir().unwrap();
+    write_show(&dir.path().join("aula.prism"));
+    let (daemon, frames) = start(dir.path()).await;
+    let socket = listen(&daemon);
+    follow(&daemon, Some(5));
+    follow_all_the_way(&daemon, 65_535);
+    socket.deliver(from(), &encode_data(0, 0, &[(5, DOWNSTAGE)]));
+    until("the head to tilt towards the performer", || {
+        byte(&frames, 3).is_some_and(|tilt| tilt.abs_diff(TILT_45) <= 1)
+    })
+    .await;
+
+    daemon
+        .desk()
+        .core()
+        .apply(&Command::PlaceFixtures {
+            placements: vec![FixturePlace {
+                id: FixtureId::new(1),
+                position: Vec3 {
+                    x: 0.0,
+                    y: 6.0,
+                    z: 0.0,
+                },
+                rotation: Vec3::ZERO,
+                follow: Some(FollowTarget {
+                    tracker: 5,
+                    offset: Vec3::ZERO,
+                }),
+                mirror: prism_domain::Mirror {
+                    pan: false,
+                    tilt: true,
+                },
+            }],
+        })
+        .unwrap();
+    // 255 - 170: the mirror of the value, because the travel is symmetric.
+    until("the head to tilt the other way", || {
+        byte(&frames, 3).is_some_and(|tilt| tilt.abs_diff(255 - TILT_45) <= 1)
+    })
+    .await;
+    assert_eq!(byte(&frames, 2), Some(128), "pan was not mirrored");
     daemon.shutdown().await;
 }
 

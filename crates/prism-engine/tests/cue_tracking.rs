@@ -80,6 +80,7 @@ fn fixture(id: u32) -> Fixture {
         rotation: Vec3::default(),
         invert_pan: false,
         invert_tilt: false,
+        mirror: Default::default(),
         software_dimmer: true,
         follow: None,
     }

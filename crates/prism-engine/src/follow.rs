@@ -59,20 +59,42 @@ struct Axis {
     /// angle's own when the channel is inverted. Mixing happens on the
     /// pre-invert values, and the mirror is exact over a mix.
     invert: bool,
+    /// Whether this axis turns the other way from the viewer's (`Mirror`).
+    ///
+    /// The aim works in the **viewer's** angles - the ones `aim` is the inverse
+    /// of - so a mirrored axis's real angle is the negative of the one the aim
+    /// asks for. Unlike `invert` it is not undone by the encoder: it is a fact
+    /// about the head and not about the cable.
+    mirrored: bool,
 }
 
 impl Axis {
-    /// The merge value that puts the axis at `degrees` once the encoder has
-    /// had its say.
+    /// The merge value that puts the axis at `degrees` (the viewer's angle)
+    /// once the encoder has had its say.
     fn value_for(&self, degrees: f64) -> u16 {
-        let value = self.travel.value(degrees);
+        let real = if self.mirrored { -degrees } else { degrees };
+        let value = self.travel.value(real);
         if self.invert { u16::MAX - value } else { value }
     }
 
-    /// The angle a merge value turns the axis to.
+    /// The viewer's angle a merge value turns the axis to.
     fn degrees_of(&self, value: u16) -> f64 {
-        self.travel
-            .degrees(if self.invert { u16::MAX - value } else { value })
+        let real = self
+            .travel
+            .degrees(if self.invert { u16::MAX - value } else { value });
+        if self.mirrored { -real } else { real }
+    }
+
+    /// The travel in the viewer's angles, which is what `aim` chooses within.
+    fn model_travel(&self) -> Travel {
+        if self.mirrored {
+            Travel {
+                from: -self.travel.to,
+                to: -self.travel.from,
+            }
+        } else {
+            self.travel
+        }
     }
 }
 
@@ -140,23 +162,35 @@ impl FollowLayer {
             ) else {
                 continue;
             };
-            let axis = |attribute: AttributeType, slot: usize, fixture_invert: bool| {
-                fixture_type
-                    .attributes
-                    .iter()
-                    .find(|def| def.attribute == attribute && def.occurrence == 0)
-                    .map(|def| Axis {
-                        slot,
-                        travel: Travel {
-                            from: def.physical_from,
-                            to: def.physical_to,
-                        },
-                        invert: def.invert ^ fixture_invert,
-                    })
-            };
+            let axis =
+                |attribute: AttributeType, slot: usize, fixture_invert: bool, mirrored: bool| {
+                    fixture_type
+                        .attributes
+                        .iter()
+                        .find(|def| def.attribute == attribute && def.occurrence == 0)
+                        .map(|def| Axis {
+                            slot,
+                            travel: Travel {
+                                from: def.physical_from,
+                                to: def.physical_to,
+                            },
+                            invert: def.invert ^ fixture_invert,
+                            mirrored,
+                        })
+                };
             let (Some(pan), Some(tilt)) = (
-                axis(AttributeType::Pan, pan, fixture.invert_pan),
-                axis(AttributeType::Tilt, tilt, fixture.invert_tilt),
+                axis(
+                    AttributeType::Pan,
+                    pan,
+                    fixture.invert_pan,
+                    fixture.mirror.pan,
+                ),
+                axis(
+                    AttributeType::Tilt,
+                    tilt,
+                    fixture.invert_tilt,
+                    fixture.mirror.tilt,
+                ),
             ) else {
                 continue;
             };
@@ -246,8 +280,8 @@ impl FollowLayer {
                 head.position,
                 &head.orientation,
                 target,
-                head.pan.travel,
-                head.tilt.travel,
+                head.pan.model_travel(),
+                head.tilt.model_travel(),
                 near,
             ) else {
                 continue;
@@ -310,7 +344,12 @@ mod tests {
 
     impl Bench {
         fn new() -> Self {
-            let (fixture, head) = rig();
+            Self::mirrored(prism_domain::Mirror::default())
+        }
+
+        fn mirrored(mirror: prism_domain::Mirror) -> Self {
+            let (mut fixture, head) = rig();
+            fixture.mirror = mirror;
             let plan = MergePlan::build([(fixture.id, &head, false)]).unwrap();
             let table = Arc::new(TrackerTable::new());
             let layer = FollowLayer::build(&plan, [(&fixture, &head)], Arc::clone(&table));
@@ -399,6 +438,53 @@ mod tests {
         let all = full.get(AttributeType::Tilt);
         assert!(all > half && half > 0, "{half} of {all}");
         assert!(half.abs_diff(all / 2) <= 2, "{half} of {all}");
+    }
+
+    /// **A head whose motor runs the other way is aimed the other way**, so the
+    /// viewer - which draws it mirrored - and the real head agree about where it
+    /// points. The travel is symmetric, so the mirror of an angle is the mirror
+    /// of its value.
+    #[test]
+    fn a_mirrored_axis_is_aimed_the_other_way() {
+        let aimed = |mirror| {
+            let mut bench = Bench::mirrored(mirror);
+            bench.table.publish(1, v(2.0, 0.0, -2.0));
+            bench.set(AttributeType::Follow, u16::MAX);
+            bench.run();
+            (
+                bench.get(AttributeType::Pan),
+                bench.get(AttributeType::Tilt),
+            )
+        };
+        let (pan, tilt) = aimed(prism_domain::Mirror::default());
+        assert!(
+            pan.abs_diff(32768) > 1_000,
+            "a pan that is not the middle: {pan}"
+        );
+        assert!(
+            tilt.abs_diff(32768) > 1_000,
+            "a tilt that is not the middle: {tilt}"
+        );
+
+        let (mirrored_pan, same_tilt) = aimed(prism_domain::Mirror {
+            pan: true,
+            tilt: false,
+        });
+        assert!(
+            u32::from(pan).abs_diff(u32::from(u16::MAX) - u32::from(mirrored_pan)) <= 2,
+            "{pan} and {mirrored_pan}"
+        );
+        assert_eq!(same_tilt, tilt, "tilt is not mirrored");
+
+        let (same_pan, mirrored_tilt) = aimed(prism_domain::Mirror {
+            pan: false,
+            tilt: true,
+        });
+        assert_eq!(same_pan, pan, "pan is not mirrored");
+        assert!(
+            u32::from(tilt).abs_diff(u32::from(u16::MAX) - u32::from(mirrored_tilt)) <= 2,
+            "{tilt} and {mirrored_tilt}"
+        );
     }
 
     #[test]

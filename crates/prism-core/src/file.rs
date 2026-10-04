@@ -1774,6 +1774,7 @@ impl ShowFile {
                     // hangs the fixture as its profile describes it.
                     rotation: fixture.rotation.unwrap_or(prism_domain::Vec3::ZERO),
                     follow: None,
+                    mirror: prism_domain::Mirror::default(),
                 };
                 if place.is_reachable() {
                     places.push(place);
@@ -2905,12 +2906,14 @@ mod rig_tests {
                 position: prism_domain::Vec3::new(-2.0, 6.0, 1.5),
                 rotation: prism_domain::Vec3::new(35.0, 120.0, -15.0),
                 follow: None,
+                mirror: prism_domain::Mirror::default(),
             },
             prism_domain::FixturePlace {
                 id: prism_domain::FixtureId::new(30),
                 position: prism_domain::Vec3::new(0.25, 0.0, -3.0),
                 rotation: prism_domain::Vec3::new(180.0, 0.0, 0.0),
                 follow: None,
+                mirror: prism_domain::Mirror::default(),
             },
         ];
         source.show.place_fixtures(&places).unwrap();

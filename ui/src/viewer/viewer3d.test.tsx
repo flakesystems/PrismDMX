@@ -230,6 +230,32 @@ describe("the place panel", () => {
   });
 
   /**
+   * **A place carries the mirror too** - S32. A head whose motor runs the other
+   * way is one fact about that fixture, sent with where it hangs, so one command
+   * and one Oops.
+   */
+  it("tells the daemon which axes run the other way, in the command that places it", () => {
+    const { places } = viewer({ programmer: selecting([1]) });
+    const pan = screen.getByTestId("viewer-place-mirrorPan");
+    const tilt = screen.getByTestId("viewer-place-mirrorTilt");
+    // Nothing mirrors anything yet.
+    expect(pan).toHaveProperty("checked", false);
+    expect(tilt).toHaveProperty("checked", false);
+    fireEvent.click(pan);
+    expect(pan).toHaveProperty("checked", true);
+    fireEvent.click(screen.getByTestId("viewer-place-set"));
+    const [sent] = places();
+    expect(sent).toMatchObject({
+      t: "PlaceFixtures",
+      placements: [{ id: 1, mirror: { pan: true, tilt: false } }],
+    });
+    // And clicking it again says neither, which is no member at all.
+    fireEvent.click(pan);
+    fireEvent.click(screen.getByTestId("viewer-place-set"));
+    expect(places()[1]).not.toHaveProperty("placements.0.mirror");
+  });
+
+  /**
    * **A place carries the tracker too** - S32. Where a head hangs and what it is
    * aimed at from there are one fact, so one command and one Oops.
    */

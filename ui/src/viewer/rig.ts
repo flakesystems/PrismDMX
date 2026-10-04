@@ -128,6 +128,12 @@ export interface RigFixture {
    * *aimed from*, so it travels with the place: `PlaceFixtures` carries both.
    */
   readonly follow: FollowTarget | null;
+  /**
+   * Which of its axes run the other way from the viewer's - **S32**,
+   * `prism_domain::Mirror`. Applied to the pan and the tilt the picture reads
+   * off the cable (`look.ts`), and by the daemon to what a tracker aims at.
+   */
+  readonly mirror: { readonly pan: boolean; readonly tilt: boolean };
   /** Whether it is still where a patch leaves it: at the origin, turned by nothing. */
   readonly unplaced: boolean;
   /** Width, height and depth of its body, in metres. */
@@ -296,6 +302,7 @@ export function rigOf(show: JsonValue | null): readonly RigFixture[] {
     const rotation = vectorOf(entry.rotation ?? null, ORIGIN);
     rig.push({
       follow: followOf(entry.follow ?? null),
+      mirror: mirrorOf(entry.mirror ?? null),
       id,
       name: typeof entry.name === "string" ? entry.name : "",
       universe: finite(entry.universe ?? null, 0),
@@ -324,6 +331,14 @@ function followOf(value: JsonValue | null): FollowTarget | null {
     return null;
   }
   return { tracker, offset: vectorOf(value.offset ?? null, ORIGIN) };
+}
+
+/** Which axes a fixture mirrors, out of the show document - neither when absent. */
+function mirrorOf(value: JsonValue | null): { readonly pan: boolean; readonly tilt: boolean } {
+  if (value === null || !isObject(value)) {
+    return { pan: false, tilt: false };
+  }
+  return { pan: value.pan === true, tilt: value.tilt === true };
 }
 
 /** Whether every component is nought. */

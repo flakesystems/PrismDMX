@@ -90,8 +90,8 @@ pub use patch::{
     RgbColor, Vec3,
 };
 pub use placement::{
-    Aim, FixturePlace, FollowTarget, MAX_REACH, MAX_TRACKER, Orientation, Travel, aim, orientation,
-    rotation_of, turn,
+    Aim, FixturePlace, FollowTarget, MAX_REACH, MAX_TRACKER, Mirror, Orientation, Travel, aim,
+    orientation, rotation_of, turn,
 };
 pub use playback::{PlaybackId, PlaybackTarget};
 pub use preset::{Preset, PresetPool, PresetValue};

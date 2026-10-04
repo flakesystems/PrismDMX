@@ -375,6 +375,7 @@ fn patch(layout: &FrameLayout, fixture_type: &FixtureType, count: u32) -> Vec<Fi
             rotation: Vec3::ZERO,
             invert_pan: index.is_multiple_of(2),
             invert_tilt: index.is_multiple_of(2),
+            mirror: Default::default(),
         })
         .collect()
 }

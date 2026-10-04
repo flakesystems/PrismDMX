@@ -233,6 +233,19 @@ von einem Master.
   schickt ihn mit dem Ort, ein leeres Feld lässt jedem Fixture seinen eigenen
   Wert, ein Strich nimmt den Tracker weg. Einen Kopf zu ziehen, der folgt, lässt
   ihn folgend.
+- **Läuft andersherum.** Zwei Kästchen, **Pan** und **Tilt**, für einen Kopf, dessen
+  Motor sich anders herum dreht als das Bild — der Strahl im Viewer schwenkt nach
+  links, wo der echte Kopf nach rechts schwenkt. **Keine Rotation richtet das**:
+  eine Rotation addiert sich zum Pan und dreht die Front des Kopfes, und einen
+  Kopf umzudrehen spiegelt ihn nur, indem es den Strahl falsch herum nach oben
+  schickt. Die Kästchen sagen es direkt. Sie ändern, was der Viewer **zeichnet**
+  und worauf ein Tracker **gerichtet** wird — ein folgender Kopf wird durch seine
+  Spiegelung gerichtet, sodass der echte Kopf auf dem Darsteller landet — und
+  **keinen Wert auf dem Kabel**: ein Pan von 60 % bleibt 60 %. Es ist, *wie der
+  Kopf ist*, also steht es mit dem Fixture in der Show, wird mit dem Ort gesendet
+  (ein Oops) und bleibt erhalten, wenn Sie die Adresse korrigieren. Eine Auswahl,
+  deren Köpfe sich unterscheiden, zeigt das Kästchen halb gefüllt; ein Klick darauf
+  setzt es für jeden gewählten Kopf.
 - **Was die Zahlen bedeuten.** Meter, gemessen von einem Punkt, den Sie wählen —
   die Mitte der Bühnenvorderkante auf Bodenhöhe ist ein guter. **X** läuft quer
   über die Bühne (positiv ist Bühne links, also vom Publikum aus rechts), **Y**

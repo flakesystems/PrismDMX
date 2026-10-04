@@ -960,6 +960,7 @@ mod tests {
                 rotation: prism_domain::Vec3::ZERO,
                 invert_pan: false,
                 invert_tilt: false,
+                mirror: Default::default(),
             })
             .unwrap();
         }

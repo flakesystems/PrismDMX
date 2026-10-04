@@ -95,6 +95,48 @@ pub struct FixturePlace {
     /// found.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub follow: Option<FollowTarget>,
+    /// Which of its axes run the other way from the viewer's - see [`Mirror`].
+    ///
+    /// Carried here for [`Self::follow`]'s reason: it is a fact about how one
+    /// fixture hangs and moves, it is undone with the rest of the gesture, and
+    /// a place that leaves it out would quietly un-mirror a head every time it
+    /// was dragged.
+    #[serde(default, skip_serializing_if = "Mirror::is_none")]
+    pub mirror: Mirror,
+}
+
+/// **Which of a moving head's axes turn the other way from the viewer's** - S32.
+///
+/// The viewer draws every head with one convention: positive pan turns the way a
+/// positive heading does, positive tilt tips towards the front. A head whose
+/// motor runs the other way has the beam going where the picture says it does
+/// not, and **no rotation puts that right** - turning a fixture over mirrors
+/// pan, but it also sends the beam the wrong way up. So this says so directly.
+///
+/// It is **how the head is**, and so it is in the show with the fixture. It
+/// changes what the viewer draws and what a tracker aims at
+/// (`prism_engine::FollowLayer`), and **nothing the cable carries for a value
+/// anybody typed**: a pan of 60 % is still 60 %, which is the difference from
+/// [`crate::Fixture::invert_pan`], whose whole point is to change the cable.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct Mirror {
+    /// Pan runs the other way.
+    #[serde(default)]
+    pub pan: bool,
+    /// Tilt runs the other way.
+    #[serde(default)]
+    pub tilt: bool,
+}
+
+impl Mirror {
+    /// Whether neither axis is mirrored - what every fixture was before this
+    /// existed, and what is **not written** to a show file.
+    #[must_use]
+    pub const fn is_none(&self) -> bool {
+        !self.pan && !self.tilt
+    }
 }
 
 impl FixturePlace {
@@ -400,7 +442,7 @@ mod tests {
     use super::{
         FixturePlace, MAX_REACH, Orientation, Travel, aim, orientation, rotation_of, turn,
     };
-    use crate::{FixtureId, Vec3};
+    use crate::{FixtureId, Mirror, Vec3};
 
     const DOWN: Vec3 = Vec3 {
         x: 0.0,
@@ -485,6 +527,7 @@ mod tests {
             position,
             rotation,
             follow: None,
+            mirror: Mirror::default(),
         };
         assert!(at(v(4.0, 6.0, -2.0), v(0.0, 720.0, 0.0)).is_reachable());
         assert!(at(v(MAX_REACH, 0.0, 0.0), Vec3::ZERO).is_reachable());

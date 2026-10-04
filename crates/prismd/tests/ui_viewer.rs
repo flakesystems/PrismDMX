@@ -326,6 +326,7 @@ fn place(id: u32, position: Vec3, rotation: Vec3) -> FixturePlace {
         position,
         rotation,
         follow: None,
+        mirror: prism_domain::Mirror::default(),
     }
 }
 

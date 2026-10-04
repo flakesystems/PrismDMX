@@ -37,6 +37,10 @@ Every version so far is a **pre-release**.
   once, and once more when it is back. *Checked only against simulated trackers*:
   which axes a real system uses is your setting (installer's manual, chapter 13).
   OSC follows.
+- **A head that runs the other way (Viewer 3D):** two tick boxes under *Runs the
+  other way*, **Pan** and **Tilt**, for a head whose motor turns the other way
+  from the picture's - which no rotation can put right. They change how the viewer
+  draws the head and which way a tracker aims it, and nothing on the cable.
 - **One fault fewer on the way:** an MVR file that hung a fixture almost exactly
   vertical read back with an angle error; the matrix is now written to twelve
   places.

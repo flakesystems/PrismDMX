@@ -144,6 +144,10 @@ pub struct Fixture {
     /// its assignments and meets that hall's trackers by number.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub follow: Option<crate::FollowTarget>,
+    /// Which of this head's axes run the other way from the viewer's - S32. See
+    /// [`crate::Mirror`]. Absent from a show file while neither does.
+    #[serde(default, skip_serializing_if = "crate::Mirror::is_none")]
+    pub mirror: crate::Mirror,
 }
 
 /// The default for [`Fixture::software_dimmer`]: a fixture that needs one gets
@@ -253,6 +257,28 @@ mod tests {
         assert_eq!(back.follow, None);
     }
 
+    /// **And the same for a mirrored axis**: absent reads as neither, and neither
+    /// is not written, so a show that never mirrors a head is what it was.
+    #[test]
+    fn a_fixture_with_no_mirror_neither_reads_nor_writes_one() {
+        let plain = fixture();
+        let json = serde_json::to_value(&plain).unwrap();
+        assert!(json.get("mirror").is_none(), "{json}");
+        let back: Fixture = serde_json::from_value(json).unwrap();
+        assert!(back.mirror.is_none());
+
+        let mut flipped = fixture();
+        flipped.mirror = crate::Mirror {
+            pan: true,
+            tilt: false,
+        };
+        let json = serde_json::to_value(&flipped).unwrap();
+        assert_eq!(json["mirror"]["pan"], true);
+        assert_eq!(json["mirror"]["tilt"], false);
+        let back: Fixture = serde_json::from_value(json).unwrap();
+        assert_eq!(back, flipped);
+    }
+
     #[test]
     fn a_tracker_to_follow_round_trips_with_its_offset() {
         let mut following = fixture();
@@ -287,6 +313,7 @@ mod tests {
             rotation: Vec3::ZERO,
             invert_pan: false,
             invert_tilt: true,
+            mirror: Default::default(),
         }
     }
 

@@ -36,6 +36,11 @@ Alle Versionen bisher sind **Vorabversionen**.
   wenn er zurück ist. *Nur an simulierten Trackern geprüft*: welche Achsen ein
   echtes System benutzt, ist Ihre Einstellung (Installationshandbuch, Kapitel 13).
   OSC folgt.
+- **Ein Kopf, der andersherum läuft (Viewer 3D):** zwei Kästchen unter *Runs the
+  other way*, **Pan** und **Tilt**, für einen Kopf, dessen Motor sich anders herum
+  dreht als das Bild — was keine Rotation richten kann. Sie ändern, wie der Viewer
+  den Kopf zeichnet und in welche Richtung ein Tracker ihn richtet, und nichts auf
+  dem Kabel.
 - **Mehr als ein Pult-Fehler weniger:** eine MVR-Datei, die ein Fixture beinahe
   senkrecht gekippt hängte, las sich mit einem Winkelfehler zurück; die Matrix wird
   jetzt mit zwölf Stellen geschrieben.

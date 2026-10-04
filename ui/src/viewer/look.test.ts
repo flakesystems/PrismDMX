@@ -150,6 +150,25 @@ describe("position and zoom", () => {
     expect(look.tilt).toBe(-135);
   });
 
+  /**
+   * **S32: a head whose motor runs the other way is drawn the other way**, off
+   * the same cable. The numbers on the cable are the ones that were typed, so
+   * nothing here changes what the frame holds - only which way the picture reads
+   * it.
+   */
+  it("draws a mirrored axis the other way round, and only that axis", () => {
+    const frame = frameWith({ 1: 255, 2: 0 });
+    const channels = { Pan: channel(0), Tilt: channel(1) };
+    const plain = readLook(made(channels), frame);
+    expect([plain.pan, plain.tilt]).toEqual([270, -135]);
+
+    const pan = readLook({ ...made(channels), mirror: { pan: true, tilt: false } }, frame);
+    expect([pan.pan, pan.tilt]).toEqual([-270, -135]);
+
+    const tilt = readLook({ ...made(channels), mirror: { pan: false, tilt: true } }, frame);
+    expect([tilt.pan, tilt.tilt]).toEqual([270, 135]);
+  });
+
   it("applies the device's own invert, and reads the fine byte after the coarse", () => {
     const frame = frameWith({ 1: 0x12, 2: 0x34 });
     expect(channelValue(frame, 0, 1, channel(0, { fine: 1 }))).toBe(0x1234);

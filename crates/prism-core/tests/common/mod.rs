@@ -81,6 +81,7 @@ pub fn fixture(id: u32, type_id: &str, universe: u32, address: u16) -> Fixture {
         rotation: Vec3::ZERO,
         invert_pan: false,
         invert_tilt: false,
+        mirror: Default::default(),
     }
 }
 
@@ -240,6 +241,7 @@ pub fn show_commands() -> Vec<Command> {
                 position: Vec3::new(0.0, 6.0, 2.0),
                 rotation: Vec3::new(30.0, 0.0, 0.0),
                 follow: None,
+                mirror: prism_domain::Mirror::default(),
             }],
         },
         Command::EmbedFixtureType {

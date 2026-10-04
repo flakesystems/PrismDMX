@@ -497,6 +497,7 @@ fn stress_patch(layout: &FrameLayout, fixture_type: &FixtureType) -> Vec<Fixture
             rotation: Vec3::ZERO,
             invert_pan: index % 2 == 0,
             invert_tilt: index % 2 == 0,
+            mirror: Default::default(),
         })
         .collect()
 }

@@ -781,17 +781,27 @@ impl Show {
         address: u16,
         software_dimmer: bool,
     ) -> Result<Applied, ShowError> {
-        let (position, rotation, invert_pan, invert_tilt, follow) =
-            self.fixture(id)
-                .map_or((Vec3::ZERO, Vec3::ZERO, false, false, None), |existing| {
+        let (position, rotation, invert_pan, invert_tilt, follow, mirror) =
+            self.fixture(id).map_or(
+                (
+                    Vec3::ZERO,
+                    Vec3::ZERO,
+                    false,
+                    false,
+                    None,
+                    prism_domain::Mirror::default(),
+                ),
+                |existing| {
                     (
                         existing.position,
                         existing.rotation,
                         existing.invert_pan,
                         existing.invert_tilt,
                         existing.follow,
+                        existing.mirror,
                     )
-                });
+                },
+            );
         // **A fixture with no name is named after its type** — S57, punch-list
         // B60. A sheet of dashes is a rig nobody can read at a glance, and the
         // type is the name an operator would have typed anyway. Here, in the
@@ -810,6 +820,7 @@ impl Show {
             invert_pan,
             invert_tilt,
             follow,
+            mirror,
         })?;
 
         let mut deltas = vec![Delta::ShowPatch { ops }];

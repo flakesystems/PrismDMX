@@ -55,6 +55,7 @@ import {
   NO_TRACKER,
   fieldsAreNumbers,
   fieldsOf,
+  mirrorChoice,
   placeSet,
   placeSpread,
   readField,
@@ -369,7 +370,16 @@ function PlacePanel({
   // The form starts from where the first selected fixture hangs, and starts
   // again whenever the selection or that fixture's place changes — a form
   // holding the numbers from before an Oops would send them back.
-  const origin = useMemo(() => fieldsOf(first), [first]);
+  const origin = useMemo(
+    () => ({
+      ...fieldsOf(first),
+      // What the whole selection agrees about, and blank - keep each its own -
+      // where it does not.
+      mirrorPan: mirrorChoice(chosen, "pan"),
+      mirrorTilt: mirrorChoice(chosen, "tilt"),
+    }),
+    [first, chosen],
+  );
   const [fields, setFields] = useState<PlaceFields>(origin);
   const [shownFor, setShownFor] = useState(origin);
   if (shownFor !== origin) {
@@ -389,6 +399,28 @@ function PlacePanel({
         aria-invalid={Number.isNaN(readField(fields[key]) ?? 0)}
         onChange={(event) => {
           setFields({ ...fields, [key]: event.target.value });
+        }}
+      />
+    </label>
+  );
+
+  // A tick box with a third state for a selection that disagrees: clicking it
+  // sets every selected fixture, which is what the box then says.
+  const mirrorBox = (key: "mirrorPan" | "mirrorTilt", label: string, title: string) => (
+    <label className="viewer-field viewer-check" title={title}>
+      <span>{label}</span>
+      <input
+        type="checkbox"
+        data-testid={`viewer-place-${key}`}
+        checked={fields[key] === "on"}
+        ref={(box) => {
+          if (box !== null) {
+            box.indeterminate = fields[key] === "";
+          }
+        }}
+        disabled={chosen.length === 0}
+        onChange={() => {
+          setFields({ ...fields, [key]: fields[key] === "on" ? "off" : "on" });
         }}
       />
     </label>
@@ -437,6 +469,11 @@ function PlacePanel({
         {field("ox", "X", "Aim this far across from the tracker, in metres")}
         {field("oy", "Y", "Aim this far above the tracker, in metres: the chest of a performer whose tracker is at the belt")}
         {field("oz", "Z", "Aim this far upstage of the tracker, in metres")}
+      </fieldset>
+      <fieldset className="viewer-fields" data-testid="viewer-place-mirror">
+        <legend>Runs the other way</legend>
+        {mirrorBox("mirrorPan", "Pan", "This head's pan turns the other way from the picture's: the beam is drawn, and a tracker is aimed, the other way round. The cable is not changed")}
+        {mirrorBox("mirrorTilt", "Tilt", "This head's tilt tips the other way from the picture's. The cable is not changed")}
       </fieldset>
       <fieldset className="viewer-fields">
         <legend>Spread</legend>

@@ -77,6 +77,7 @@ fn fixture(type_id: &str) -> Fixture {
         rotation: Vec3::ZERO,
         invert_pan: false,
         invert_tilt: false,
+        mirror: Default::default(),
     }
 }
 

@@ -97,6 +97,7 @@ round_trip! {
     fixture => crate::Fixture,
     fixture_place => crate::FixturePlace,
     follow_target => crate::FollowTarget,
+    mirror => crate::Mirror,
     source_axis => crate::SourceAxis,
     show_axis => crate::ShowAxis,
     axis_source => crate::AxisSource,

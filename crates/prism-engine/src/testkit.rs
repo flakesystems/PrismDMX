@@ -166,5 +166,6 @@ pub(crate) fn fixture(id: u32, type_id: &str, universe: u32, address: u16) -> Fi
         rotation: Vec3::ZERO,
         invert_pan: false,
         invert_tilt: false,
+        mirror: Default::default(),
     }
 }

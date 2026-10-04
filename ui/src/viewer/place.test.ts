@@ -11,6 +11,7 @@ import {
   NO_TRACKER,
   fieldsAreNumbers,
   fieldsOf,
+  mirrorChoice,
   placeSet,
   placeSpread,
   readField,
@@ -72,6 +73,49 @@ describe("Spread", () => {
     // Everything else as the fixtures have it.
     expect(placed[0]?.position.y).toBe(6);
     expect(placed[1]?.rotation).toEqual({ x: 20, y: 0, z: 0 });
+  });
+});
+
+describe("a head whose motor runs the other way - S32", () => {
+  const flipped = (pan: boolean, tilt: boolean) =>
+    rig.map((fixture) => (fixture.id === 1 ? { ...fixture, mirror: { pan, tilt } } : fixture));
+
+  it("is not sent by a place that mirrors nothing", () => {
+    for (const place of placeSet(selectedFixtures(rig, [1, 2]), BLANK)) {
+      expect(place).not.toHaveProperty("mirror");
+    }
+  });
+
+  it("starts the form from what the fixture is, and from what a selection agrees about", () => {
+    const [first] = selectedFixtures(flipped(true, false), [1]);
+    expect(fieldsOf(first)).toMatchObject({ mirrorPan: "on", mirrorTilt: "off" });
+    const both = selectedFixtures(flipped(true, false), [1, 2]);
+    // Fixture 1 mirrors pan and fixture 2 does not: they disagree, so the box
+    // says *keep each its own* by being blank.
+    expect(mirrorChoice(both, "pan")).toBe("");
+    expect(mirrorChoice(both, "tilt")).toBe("off");
+    expect(mirrorChoice([], "pan")).toBe("");
+  });
+
+  it("is sent with the choice, and a blank choice keeps what each fixture has", () => {
+    const both = selectedFixtures(flipped(true, false), [1, 2]);
+    // Blank: fixture 1 keeps its mirrored pan and fixture 2 stays plain.
+    const kept = placeSet(both, BLANK);
+    expect(kept[0]?.mirror).toEqual({ pan: true, tilt: false });
+    expect(kept[1]).not.toHaveProperty("mirror");
+    // On: every selected fixture, whatever it was.
+    const on = placeSet(both, { ...BLANK, mirrorTilt: "on" });
+    expect(on.map((place) => place.mirror)).toEqual([
+      { pan: true, tilt: true },
+      { pan: false, tilt: true },
+    ]);
+    // Off takes it away, and a place with neither says nothing at all.
+    const off = placeSet(both, { ...BLANK, mirrorPan: "off" });
+    expect(off[0]).not.toHaveProperty("mirror");
+  });
+
+  it("is not mistaken for a number by the form's check", () => {
+    expect(fieldsAreNumbers({ ...BLANK, mirrorPan: "on", mirrorTilt: "off" })).toBe(true);
   });
 });
 

@@ -998,6 +998,7 @@ impl Show {
                 position: fixture.position,
                 rotation: fixture.rotation,
                 follow: fixture.follow,
+                mirror: fixture.mirror,
             })
     }
 
@@ -1008,7 +1009,7 @@ impl Show {
     /// fixture named twice ends where its **last** place puts it, which is what
     /// applying the list in order would do.
     ///
-    /// **Not a patch.** Only `position`, `rotation` and the tracker to follow
+    /// **Not a patch.** Only `position`, `rotation`, the tracker to follow and the mirror
     /// are written, each as an op of its own, and the patch revision does not move — where a
     /// fixture hangs changes no channel, so nothing the engine built from the
     /// patch is out of date. A place a fixture already has writes nothing.
@@ -1059,6 +1060,18 @@ impl Show {
                     None => JsonPatchOp::Remove { path },
                 });
                 fixture.follow = place.follow;
+            }
+            if fixture.mirror != place.mirror {
+                let path = format!("{}/mirror", pointer(FIXTURES, &key));
+                ops.push(if place.mirror.is_none() {
+                    JsonPatchOp::Remove { path }
+                } else {
+                    // Absent while neither axis is mirrored, so the first
+                    // mirror *adds* the member and every change after it
+                    // replaces it - `follow`'s rule.
+                    put(path, &place.mirror, !fixture.mirror.is_none())?
+                });
+                fixture.mirror = place.mirror;
             }
         }
         if !ops.is_empty() {

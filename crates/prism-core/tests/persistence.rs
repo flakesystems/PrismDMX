@@ -101,6 +101,7 @@ fn hung(id: u32, type_id: &str, universe: u32, address: u16, x: f64) -> Fixture 
         },
         invert_pan: id.is_multiple_of(2),
         invert_tilt: id.is_multiple_of(3),
+        mirror: Default::default(),
     }
 }
 

@@ -5593,6 +5593,23 @@ the cause is **not known**; what was done is what could be done from here.
   own attributes and for a first pan plus a first tilt, as in Rust. Seven tests
   that said *Pan, Tilt* say *Pan, Tilt, Follow*; one asserts a dimmer has none.
   The command line (`Fixture 1 Follow At 100`) had always worked.
+- **A head that runs the other way (the owner's request, on a head standing on
+  the floor).** No rotation can reverse pan: a hanging head's heading *adds* to
+  the pan (`Ry(rotY) * Ry(pan)`), and standing a head up (`Rx(180)`) already
+  reverses it - correctly, and not for a head whose motor differs. So
+  `prism_domain::Mirror { pan, tilt }` is a field of `Fixture` (absent from a
+  show file while neither is set) and of `FixturePlace` (so one gesture, one
+  Oops, and a repatch keeps it), written as `/fixtures/N/mirror` add, replace or
+  remove. **The viewer negates the angle it reads off the cable** (`look.ts`), and
+  **the follow layer aims through it** (`Axis::mirrored`: `aim` works in the
+  viewer's angles, the real angle is the negative) - the owner's point: without
+  that the real head would be picked off the performer. It changes no cable
+  value, which is the difference from `invertPan`/`invertTilt`, and neither of
+  those has a control. The panel has two tick boxes (a half-filled one for a
+  selection that disagrees). 6 new Rust tests (domain 1, core 4, engine 1) and a
+  daemon test that flips the tilt on the running desk and watches the byte go
+  from 170 to 85 with pan untouched; 6 interface tests. Checked only against
+  bytes and a drawing: **no real head has been compared** (§5).
 - **Still the owner's to answer** (the ranked causes, in the order to try them):
   *Settings → Trackers → Listen* ticked (it is off by default); what the status
   line says now; the Windows Firewall's inbound rule for `prismd.exe` on the

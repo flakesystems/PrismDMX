@@ -29,6 +29,7 @@ fn place(id: u32, position: Vec3, rotation: Vec3) -> FixturePlace {
         position,
         rotation,
         follow: None,
+        mirror: prism_domain::Mirror::default(),
     }
 }
 
@@ -405,4 +406,124 @@ fn a_repatch_keeps_the_tracker() {
     let fixture = file.show.fixture(FixtureId::new(1)).unwrap();
     assert_eq!(fixture.address, 101);
     assert_eq!(fixture.follow, following(1, 5).follow);
+}
+
+// ---- S32: a head whose motor runs the other way ---------------------------
+
+fn mirrored(id: u32, pan: bool, tilt: bool) -> FixturePlace {
+    FixturePlace {
+        mirror: prism_domain::Mirror { pan, tilt },
+        ..place(id, Vec3::new(-1.0, 6.0, 2.0), Vec3::new(20.0, 0.0, 0.0))
+    }
+}
+
+/// **The mirror is written like the tracker is**: absent while neither axis is
+/// mirrored, so the first one adds the member, a change replaces it, and putting
+/// it right again removes it - which is what keeps a show that never uses it
+/// byte for byte what 0.9.3 wrote.
+#[test]
+fn a_mirror_is_an_add_then_a_replace_then_a_remove_and_is_not_a_patch() {
+    let mut file = file();
+    // Placed first without a mirror, so that what the last step is compared with
+    // differs from it in the mirror alone and not in where the head hangs.
+    file.apply(&Command::PlaceFixtures {
+        placements: vec![mirrored(1, false, false)],
+    })
+    .unwrap();
+    let before = bytes(&file);
+    let first = file
+        .apply(&Command::PlaceFixtures {
+            placements: vec![mirrored(1, true, false)],
+        })
+        .unwrap();
+    assert!(
+        ops_of(&first).iter().any(|op| matches!(
+            op,
+            JsonPatchOp::Add { path, .. } if path == "/fixtures/1/mirror"
+        )),
+        "{:?}",
+        ops_of(&first)
+    );
+    assert!(!first.effects.contains(&Effect::Repatch));
+    assert!(
+        !first.effects.contains(&Effect::Refollow),
+        "a head that follows nothing is not the engine's business"
+    );
+    assert!(file.show.fixture(FixtureId::new(1)).unwrap().mirror.pan);
+
+    let second = file
+        .apply(&Command::PlaceFixtures {
+            placements: vec![mirrored(1, true, true)],
+        })
+        .unwrap();
+    assert!(ops_of(&second).iter().any(|op| matches!(
+        op,
+        JsonPatchOp::Replace { path, .. } if path == "/fixtures/1/mirror"
+    )));
+
+    let third = file
+        .apply(&Command::PlaceFixtures {
+            placements: vec![mirrored(1, false, false)],
+        })
+        .unwrap();
+    assert!(ops_of(&third).iter().any(|op| matches!(
+        op,
+        JsonPatchOp::Remove { path } if path == "/fixtures/1/mirror"
+    )));
+    assert_eq!(bytes(&file), before, "no mirror is no member at all");
+}
+
+#[test]
+fn oops_takes_a_mirror_back() {
+    let mut file = file();
+    let before = bytes(&file);
+    file.apply(&Command::PlaceFixtures {
+        placements: vec![mirrored(1, false, true)],
+    })
+    .unwrap();
+    file.apply(&Command::Oops).unwrap();
+    assert_eq!(bytes(&file), before);
+    file.apply(&Command::Redo).unwrap();
+    assert!(file.show.fixture(FixtureId::new(1)).unwrap().mirror.tilt);
+}
+
+/// A head that follows is aimed through its mirror, so changing one is the
+/// engine's business for that head and only for that head.
+#[test]
+fn mirroring_a_head_that_follows_refollows() {
+    let mut file = file();
+    file.apply(&Command::PlaceFixtures {
+        placements: vec![following(1, 5)],
+    })
+    .unwrap();
+    let applied = file
+        .apply(&Command::PlaceFixtures {
+            placements: vec![FixturePlace {
+                mirror: prism_domain::Mirror {
+                    pan: true,
+                    tilt: false,
+                },
+                ..following(1, 5)
+            }],
+        })
+        .unwrap();
+    assert!(
+        applied.effects.contains(&Effect::Refollow),
+        "{:?}",
+        applied.effects
+    );
+}
+
+/// Correcting an address must not un-mirror a head any more than it unhangs it.
+#[test]
+fn a_repatch_keeps_the_mirror() {
+    let mut file = file();
+    file.apply(&Command::PlaceFixtures {
+        placements: vec![mirrored(1, true, true)],
+    })
+    .unwrap();
+    file.apply(&common::patch_command(1, 1, 101)).unwrap();
+    let fixture = file.show.fixture(FixtureId::new(1)).unwrap();
+    assert_eq!(fixture.address, 101);
+    assert!(fixture.mirror.pan && fixture.mirror.tilt);
 }

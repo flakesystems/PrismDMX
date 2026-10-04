@@ -132,6 +132,7 @@ fn write_show(path: &Path) {
         rotation: Vec3::ZERO,
         invert_pan: false,
         invert_tilt: false,
+        mirror: Default::default(),
     })
     .expect("the address is free");
 

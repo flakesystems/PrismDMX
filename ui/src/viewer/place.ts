@@ -49,7 +49,17 @@ export interface PlaceFields {
   readonly ox: string;
   readonly oy: string;
   readonly oz: string;
+  /**
+   * Whether pan and tilt run the other way from the viewer's - **S32**: `on`,
+   * `off`, or blank to *keep* what each fixture has, which is what a selection
+   * that disagrees starts as.
+   */
+  readonly mirrorPan: MirrorChoice;
+  readonly mirrorTilt: MirrorChoice;
 }
+
+/** One axis's mirror, as a form holds it. */
+export type MirrorChoice = "" | "on" | "off";
 
 /** Every field blank. */
 export const BLANK: PlaceFields = {
@@ -64,6 +74,8 @@ export const BLANK: PlaceFields = {
   ox: "",
   oy: "",
   oz: "",
+  mirrorPan: "",
+  mirrorTilt: "",
 };
 
 /** What is typed into the tracker field to take a tracker away. */
@@ -91,7 +103,8 @@ export function readField(text: string): number | null {
 
 /** Whether every field is blank or a number. */
 export function fieldsAreNumbers(fields: PlaceFields): boolean {
-  const { tracker, ...numbers } = fields;
+  // The tracker and the mirrors are not numbers and are checked on their own.
+  const { tracker, mirrorPan: _pan, mirrorTilt: _tilt, ...numbers } = fields;
   return Object.values(numbers).every((text) => !Number.isNaN(readField(text) ?? 0)) && trackerIsValid(tracker);
 }
 
@@ -126,7 +139,28 @@ export function fieldsOf(fixture: RigFixture | undefined): PlaceFields {
     ox: fixture.follow === null ? "" : text(fixture.follow.offset.x),
     oy: fixture.follow === null ? "" : text(fixture.follow.offset.y),
     oz: fixture.follow === null ? "" : text(fixture.follow.offset.z),
+    mirrorPan: fixture.mirror.pan ? "on" : "off",
+    mirrorTilt: fixture.mirror.tilt ? "on" : "off",
   };
+}
+
+/**
+ * What a selection agrees about one mirror: `on` or `off` when every fixture
+ * says so, and blank - *keep each its own* - when they differ.
+ */
+export function mirrorChoice(
+  fixtures: readonly RigFixture[],
+  axis: "pan" | "tilt",
+): MirrorChoice {
+  const [first, ...rest] = fixtures;
+  if (first === undefined) {
+    return "";
+  }
+  return rest.every((fixture) => fixture.mirror[axis] === first.mirror[axis])
+    ? first.mirror[axis]
+      ? "on"
+      : "off"
+    : "";
 }
 
 /** The selected fixtures that are in the rig, in selection order. */
@@ -174,11 +208,20 @@ function followAfter(fixture: RigFixture, fields: PlaceFields): FollowTarget | n
   };
 }
 
+/** A mirror after a gesture: the choice where there is one, the fixture's own otherwise. */
+function mirrorAfter(own: boolean, choice: MirrorChoice): boolean {
+  return choice === "" ? own : choice === "on";
+}
+
 /** *Set*: every fixture at the typed numbers, blanks kept. */
 export function placeSet(fixtures: readonly RigFixture[], fields: PlaceFields): FixturePlace[] {
   const [x, y, z, rx, ry, rz] = [fields.x, fields.y, fields.z, fields.rx, fields.ry, fields.rz].map(readField);
   return fixtures.map((fixture) => {
     const follow = followAfter(fixture, fields);
+    const mirror = {
+      pan: mirrorAfter(fixture.mirror.pan, fields.mirrorPan),
+      tilt: mirrorAfter(fixture.mirror.tilt, fields.mirrorTilt),
+    };
     return {
       id: fixture.id,
       position: merged(fixture.position, x ?? null, y ?? null, z ?? null),
@@ -186,6 +229,9 @@ export function placeSet(fixtures: readonly RigFixture[], fields: PlaceFields): 
       // Absent is *no tracker*, which is what the daemon reads it as - so a
       // fixture that follows nothing sends the place it always sent.
       ...(follow === null ? {} : { follow }),
+      // Absent is *neither*, for the same reason: a head that mirrors nothing
+      // sends the place it always sent.
+      ...(mirror.pan || mirror.tilt ? { mirror } : {}),
     };
   });
 }
