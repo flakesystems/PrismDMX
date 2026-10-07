@@ -1,4 +1,4 @@
-# Issue Report — 2026-09-30
+# Issue Report — 2026-10-07
 
 Automatisch erstellter Bericht des Issue-Tracking-Laufs.
 
@@ -6,8 +6,14 @@ Automatisch erstellter Bericht des Issue-Tracking-Laufs.
 
 ## Überblick
 
-**1 neuer GitHub-Issue** seit dem letzten Lauf (2026-09-23): Issue #41, neu
-gemeldet am 2026-09-24, noch nicht in `docs/ISSUES.md` erfasst.
+**Keine neuen GitHub-Issues** seit dem letzten Lauf (2026-09-30).
+
+Seit dem letzten Lauf wurden zwei bisher offene Einträge behoben und in
+`docs/ISSUES.md` und den Known-Faults-Seiten bereits vermerkt:
+
+- **B65** — Ein Rig lässt sich nicht als MVR exportieren → ✅ behoben (S64)
+- **B68** — Der Mac-Installer enthält keine OFL-Bibliothek (GitHub #41) → ✅ behoben
+  (Commit 880d9ec, 2026-10-03)
 
 ---
 
@@ -30,72 +36,62 @@ gemeldet am 2026-09-24, noch nicht in `docs/ISSUES.md` erfasst.
 | #28 | B60 | (feat) Improve Patch window UI and UX | ✅ geschlossen |
 | #29 | B61 | (bug) Command feedback moves the UI | ✅ geschlossen |
 | #30 | B62 | (feat) Remove store bar from Cue Viewer | ✅ geschlossen |
-| #41 | B68 | (bug) Mac installer doesn't carry the OFL | ☐ offen |
+| #41 | B68 | (bug) Mac installer doesn't carry the OFL | ✅ geschlossen |
 
 ---
 
 ## Neue Issues — Dieser Lauf
 
-### GitHub #41 → B68
-
-- **Titel (vorher):** The mac installer doesn't carry the OFL
-- **Titel (jetzt):** (bug) Mac installer doesn't carry the OFL
-- **Gemeldet von:** simpelMIC am 2026-09-24
-- **Label:** bug
-- **In ISSUES.md:** Neu aufgenommen als **B68** unter „Patch und Fixture Sheet"
-- **In Known-Faults-Seiten:** Eingetragen (en + de)
-- **Kommentar auf GitHub:** hinterlegt (Tracking-Status und Nummer)
+Keine.
 
 ---
 
 ## Geschlossene Issues — neue Kommentare geprüft
 
-Alle bisher erfassten geschlossenen Issues wurden auf neue Kommentare (nicht
-von Claude) geprüft. Kein geschlossener Issue wurde durch neue Kommentare als
-persistent-problematisch identifiziert. Kein Issue wurde wiedereröffnet.
+Issue #41 hatte einen neuen Kommentar seit dem letzten Lauf (2026-10-03): die
+Behebung in Commit 880d9ec wurde dort dokumentiert. Der Kommentar war von Claude
+(automatisch), kein Hinweis auf ein persistentes Problem.
+
+Alle anderen geschlossenen Issues wurden auf neue Kommentare geprüft — keine
+nicht-automatisierten Kommentare, kein Issue wiedereröffnet.
 
 ---
 
 ## Änderungen an `docs/ISSUES.md`
 
-- **B68** hinzugefügt (GitHub #41): „Der Mac-Installer enthält keine
-  OFL-Bibliothek", Schwere *ärgerlich*, ☐ offen, Abschnitt „Patch und Fixture
-  Sheet".
+Keine Änderungen in diesem Lauf — `docs/ISSUES.md` war bereits auf aktuellem Stand.
 
 ---
 
 ## Bekannte-Fehler-Seiten — Prüfung
 
-`docs/site/known-faults.en.md` und `docs/site/known-faults.de.md` aktualisiert:
-**B68** eingetragen.
+`docs/site/known-faults.en.md` und `docs/site/known-faults.de.md` waren bereits
+auf aktuellem Stand:
 
-**Offene Einträge (4):**
+- **B65** und **B68** sind in beiden Seiten als „Fixed for the next release"
+  eingetragen.
+- **B63** und **B66** sind weiterhin als offen aufgeführt (ohne Fix-Vermerk).
 
-| B-Nr. | Titel | Seiten |
-|---|---|---|
-| B63 | Zeichnung des Pults im Controls-Menü falsch | ✅ in beiden Seiten |
-| B65 | Rig lässt sich nicht als MVR exportieren | ✅ in beiden Seiten |
-| B66 | Mehrere Funktionen auf mehreren Tasten | ✅ in beiden Seiten |
-| B68 | Mac-Installer enthält keine OFL-Bibliothek (GitHub #41) | ✅ in beiden Seiten |
-
-Der Corpus-Test `the_known_faults_page_lists_the_faults_that_are_open` sollte
-grün sein.
+Der Test `the_known_faults_page_lists_the_faults_that_are_open` sollte grün
+bleiben: alle offenen ISSUES.md-Einträge (B63, B66) sind auf beiden Seiten
+genannt.
 
 ---
 
 ## Aktueller Stand
 
-**Stand 2026-09-30: 4 offene Einträge** — B63, B65, B66, B68.
+**Stand 2026-10-07: 2 offene Einträge** — B63, B66.
 
-- **63 behobene Einträge** (B1–B62, B64, B67).
-- B63 und B65 warten auf eine Entscheidung des Eigentümers.
-- B66 wird vom Eigentümer selbst korrigiert.
-- B68 (GitHub #41) ist neu; der Mac-Installer liefert keine OFL-Profile aus.
+- **66 behobene Einträge** (alle außer B63 und B66).
+- **68 Einträge gesamt** in `docs/ISSUES.md` (B35 und einige weitere Nummern
+  nicht vergeben — Lücken sind laut Datei kein Fehler).
+- B63 (Zeichnung des Pults im Controls-Menü) wartet auf eine eigene Session.
+- B66 (Mehrere Funktionen auf mehreren Tasten) wird vom Eigentümer selbst
+  korrigiert.
 
 ---
 
 ## Vorheriger Lauf
 
-Der Lauf vom **2026-09-23** stellte fest, dass keine neuen GitHub-Issues
-vorlagen. 3 Einträge waren offen (B63, B65, B66). B64 und B67 waren am
-2026-09-22 behoben worden.
+Der Lauf vom **2026-09-30** hatte B68 (GitHub #41) als neu erfasst.
+B63, B65, B66 und B68 waren damals offen. Seither wurden B65 und B68 behoben.
