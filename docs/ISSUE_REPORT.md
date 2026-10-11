@@ -1,4 +1,4 @@
-# Issue Report — 2026-10-07
+# Issue Report — 2026-10-11
 
 Automatisch erstellter Bericht des Issue-Tracking-Laufs.
 
@@ -6,14 +6,10 @@ Automatisch erstellter Bericht des Issue-Tracking-Laufs.
 
 ## Überblick
 
-**Keine neuen GitHub-Issues** seit dem letzten Lauf (2026-09-30).
+**Ein neues GitHub-Issue** seit dem letzten Lauf (2026-10-07): **#42** —
+3D-Positionskalibrierung für Scheinwerfer.
 
-Seit dem letzten Lauf wurden zwei bisher offene Einträge behoben und in
-`docs/ISSUES.md` und den Known-Faults-Seiten bereits vermerkt:
-
-- **B65** — Ein Rig lässt sich nicht als MVR exportieren → ✅ behoben (S64)
-- **B68** — Der Mac-Installer enthält keine OFL-Bibliothek (GitHub #41) → ✅ behoben
-  (Commit 880d9ec, 2026-10-03)
+Keine bisher offenen Einträge wurden seit dem letzten Lauf behoben.
 
 ---
 
@@ -37,61 +33,73 @@ Seit dem letzten Lauf wurden zwei bisher offene Einträge behoben und in
 | #29 | B61 | (bug) Command feedback moves the UI | ✅ geschlossen |
 | #30 | B62 | (feat) Remove store bar from Cue Viewer | ✅ geschlossen |
 | #41 | B68 | (bug) Mac installer doesn't carry the OFL | ✅ geschlossen |
+| #42 | B70 | (feat) 3D-Positionskalibrierung für Scheinwerfer | ☐ offen |
 
 ---
 
 ## Neue Issues — Dieser Lauf
 
-Keine.
+### GitHub #42 → B70 — 3D-Positionskalibrierung für Scheinwerfer
+
+- **Label:** enhancement
+- **Erstellt:** 2026-10-11
+- **Von:** Kuschelcraft
+- **Schwere:** ärgerlich
+- **ISSUES.md-Eintrag:** B70, neu angelegt im Abschnitt *Canvas, Fenster und Layout*
+- **Known-Faults-Seiten:** in beiden Seiten unter *Found while testing the next release* / *Beim Test der nächsten Version gefunden* eingetragen
+- **GitHub-Kommentar:** gepostet
+
+Der Eintrag beschreibt das Fehlen eines Kalibrierungs-Workflows für die
+3D-Positionierung von Scheinwerfern im virtuellen Rig — vergleichbar mit dem
+Ablauf in grandMA3-Konsolen. Die Funktion ist noch nicht implementiert.
 
 ---
 
 ## Geschlossene Issues — neue Kommentare geprüft
 
-Issue #41 hatte einen neuen Kommentar seit dem letzten Lauf (2026-10-03): die
-Behebung in Commit 880d9ec wurde dort dokumentiert. Der Kommentar war von Claude
-(automatisch), kein Hinweis auf ein persistentes Problem.
-
-Alle anderen geschlossenen Issues wurden auf neue Kommentare geprüft — keine
-nicht-automatisierten Kommentare, kein Issue wiedereröffnet.
+Alle zuvor geschlossenen Issues wurden auf neue nicht-automatisierte Kommentare
+geprüft — keine gefunden, kein Issue wiedereröffnet.
 
 ---
 
 ## Änderungen an `docs/ISSUES.md`
 
-Keine Änderungen in diesem Lauf — `docs/ISSUES.md` war bereits auf aktuellem Stand.
+- **B70** neu angelegt (☐ offen) für GitHub #42
 
 ---
 
 ## Bekannte-Fehler-Seiten — Prüfung
 
-`docs/site/known-faults.en.md` und `docs/site/known-faults.de.md` waren bereits
-auf aktuellem Stand:
+`docs/site/known-faults.en.md` und `docs/site/known-faults.de.md` wurden
+aktualisiert:
 
-- **B65** und **B68** sind in beiden Seiten als „Fixed for the next release"
-  eingetragen.
-- **B63** und **B66** sind weiterhin als offen aufgeführt (ohne Fix-Vermerk).
+- **B70** in beiden Seiten unter dem Abschnitt „Beim Test der nächsten Version
+  gefunden" eingetragen.
+- **B63** und **B66** bleiben weiterhin offen und sind auf beiden Seiten
+  aufgeführt.
 
 Der Test `the_known_faults_page_lists_the_faults_that_are_open` sollte grün
-bleiben: alle offenen ISSUES.md-Einträge (B63, B66) sind auf beiden Seiten
+bleiben: alle offenen ISSUES.md-Einträge (B63, B66, B70) sind auf beiden Seiten
 genannt.
 
 ---
 
 ## Aktueller Stand
 
-**Stand 2026-10-07: 2 offene Einträge** — B63, B66.
+**Stand 2026-10-11: 3 offene Einträge** — B63, B66, B70.
 
-- **66 behobene Einträge** (alle außer B63 und B66).
-- **68 Einträge gesamt** in `docs/ISSUES.md` (B35 und einige weitere Nummern
+- **66 behobene Einträge**.
+- **69 Einträge gesamt** in `docs/ISSUES.md` (B35 und einige weitere Nummern
   nicht vergeben — Lücken sind laut Datei kein Fehler).
 - B63 (Zeichnung des Pults im Controls-Menü) wartet auf eine eigene Session.
 - B66 (Mehrere Funktionen auf mehreren Tasten) wird vom Eigentümer selbst
   korrigiert.
+- B70 (3D-Positionskalibrierung) ist ein Feature-Request, noch nicht
+  implementiert.
 
 ---
 
 ## Vorheriger Lauf
 
-Der Lauf vom **2026-09-30** hatte B68 (GitHub #41) als neu erfasst.
-B63, B65, B66 und B68 waren damals offen. Seither wurden B65 und B68 behoben.
+Der Lauf vom **2026-10-07** hatte keine neuen Issues. B65 und B68 waren damals
+als behoben vermerkt. Stand zu dem Zeitpunkt: 2 offene Einträge (B63, B66).

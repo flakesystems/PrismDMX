@@ -157,6 +157,15 @@ schließen, anordnen, Ansichten, Seiten, was zu groß oder zu klein ist.*
 - **So sieht man es:** Etwas in die Kommandozeile tippen und beobachten, wie das UI springt
 - **Ergebnis:** ✅ **behoben** — die Rückmeldung bleibt, weil sie Syntaxfehler **vor** Enter zeigt (§4.5), aber sie bewegt nichts mehr. Sie war ein Absatz ohne eigene Höhe: leer null, mit einem Satz eine Zeile, mit einem langen zwei, und die Frage *Merge / Override / Cancel* kam als weitere Zeile dazu — jede Änderung verschob die Leinwand (gemessen: 444 → 425 px beim Tippen von `de`). Jetzt ist es **eine Zeile fester Höhe** (`.command-status`): links die Rückmeldung, abgeschnitten statt umbrochen und vollständig im Tooltip, oder an ihrer Stelle die Frage, solange sie steht; rechts die Engine-Zeile. Test: *what the line would do never moves the canvas* (`ui/e2e/console.spec.ts`) misst die Leinwand in Chromium vor dem Tippen, nach einer Fehlermeldung, nach einer Meldung, die viel breiter als der Bildschirm ist, mit stehender Frage und nach Escape — vor dem Fix rot, danach grün; ein Browser-Test, weil `jsdom` kein Layout rechnet.
 
+### B70 — 3D-Positionskalibrierung für Scheinwerfer fehlt (GitHub #42)
+
+- **Wo:** 3D-Viewer, Rig, Trackingsystem
+- **Schwere:** ärgerlich
+- **Was passiert:** Es gibt keinen Kalibrierungs-Workflow, um die reale Position und Ausrichtung von Scheinwerfern auf die virtuelle Bühne abzugleichen. Für ein funktionierendes Trackingsystem müssen alle Positionen exakt kalibriert sein
+- **Was passieren soll:** Ein Kalibrierungs-Workflow ähnlich wie bei grandMA3: Definition von Referenzpunkten im physischen Raum, gezieltes Ansteuern durch den Scheinwerfer, assistierte oder automatisierte Berechnung der 3D-Position und des Rotationsversatzes im virtuellen Rig
+- **So sieht man es:** Moving Head im 3D-Viewer patchen und versuchen, dessen physikalische Position und Ausrichtung exakt auf das virtuelle Modell abzugleichen — derzeit nur manuell und ohne Führung möglich
+- **Ergebnis:** ☐ offen
+
 ### B67 — Viewer 3D: Trefferfläche zu groß, Strahl nicht bündig, Bild verzerrt
 
 - **Wo:** Viewer 3D, generische und OFL-Fixtures

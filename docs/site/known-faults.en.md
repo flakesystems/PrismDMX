@@ -198,6 +198,20 @@ via the command line.
 These concern features that are not in 0.9.2 yet and come with the next
 release. They are listed so that nobody testing a build of it is surprised.
 
+## B70 — no workflow for calibrating a fixture's 3D position
+
+**Where:** 3D viewer, rig.
+**Severity:** annoying.
+
+**What happens.** There is no calibration workflow for aligning a moving head's
+real position and orientation with its place on the virtual stage. For a working
+tracking system every fixture's position must be exact, and right now alignment
+is done by hand without any guided procedure.
+
+**What you will see.** Patch a moving head in the 3D viewer and try to align its
+physical position and orientation precisely with the virtual model — only manual
+adjustment is possible.
+
 ## B63 — the drawing of the desk in the Controls panel is wrong
 
 **Where:** Settings, Controls, the *The desk* view.

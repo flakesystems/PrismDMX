@@ -208,6 +208,20 @@ Diese betreffen Funktionen, die es in 0.9.2 noch nicht gibt und die mit der
 nächsten Version kommen. Sie stehen hier, damit niemand, der einen Build davon
 testet, überrascht wird.
 
+## B70 — Kein Kalibrierungs-Workflow für die 3D-Position von Scheinwerfern
+
+**Wo:** 3D-Viewer, Rig.
+**Schwere:** ärgerlich.
+
+**Was passiert.** Es gibt keinen Workflow, um die reale Position und Ausrichtung
+eines Moving Heads mit seiner Stelle auf der virtuellen Bühne abzugleichen. Für
+ein funktionierendes Trackingsystem muss jede Position exakt stimmen, und derzeit
+erfolgt die Anpassung manuell ohne jede Führung.
+
+**So sehen Sie es.** Einen Moving Head im 3D-Viewer patchen und versuchen,
+dessen physikalische Position und Ausrichtung exakt auf das virtuelle Modell
+abzugleichen — derzeit nur manuell möglich.
+
 ## B63 — Die Zeichnung des Pults im Controls-Menü ist falsch
 
 **Wo:** Settings, Controls, Ansicht *The desk*.
