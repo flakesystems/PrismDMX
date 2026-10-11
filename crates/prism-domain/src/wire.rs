@@ -106,6 +106,10 @@ round_trip! {
     tracker_change => crate::TrackerChange,
     tracker_health => crate::TrackerHealth,
     seen_tracker => crate::SeenTracker,
+    aimed_at => crate::AimedAt,
+    calibration_answer => crate::CalibrationAnswer,
+    calibration_sighting => crate::CalibrationSighting,
+    sighting_fit => crate::SightingFit,
     group => crate::Group,
 
     preset_value => crate::PresetValue,

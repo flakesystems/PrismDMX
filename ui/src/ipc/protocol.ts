@@ -25,6 +25,7 @@ import type {
   Answer,
   ArtNetCounters,
   ArtNetNodeInfo,
+  CalibrationAnswer,
   BoundControl,
   Command,
   CommandLineQuestion,
@@ -750,6 +751,16 @@ export function readAnswer(value: unknown, path: string): Answer {
         // appears. `Answer::MidiPorts`' remedy is the precedent (S37).
         remedy: readOptionalString(field(record, "remedy"), `${path}.remedy`),
       };
+    // B70. What a calibration query found: a pose, or the daemon's words for
+    // why none, or the pan and tilt that drive a head to a mark. One answer
+    // with three shapes, each read field by field - a calibration that dropped
+    // the connection on its first sighting would be the B55 fault a fourth time.
+    case "Calibration":
+      return {
+        t: "Calibration",
+        fixture: asInteger(field(record, "fixture"), `${path}.fixture`),
+        answer: readCalibrationAnswer(field(record, "answer"), `${path}.answer`),
+      };
     // S32. The trackers this desk has heard, and **whether it is listening** -
     // read before the list is, for `ArtNetNodes`' reason: an empty list under a
     // receiver that never opened says nothing about the network.
@@ -1437,6 +1448,54 @@ function readTrackerSettings(value: unknown, path: string): TrackerSettings {
 }
 
 /** One tracker the daemon has heard from - S32. */
+function readCalibrationAnswer(value: unknown, path: string): CalibrationAnswer {
+  const record = asRecord(value, path);
+  const tag = asString(field(record, "t"), `${path}.t`);
+  switch (tag) {
+    case "Solved":
+      return {
+        t: "Solved",
+        position: readVector(field(record, "position"), `${path}.position`),
+        rotation: readVector(field(record, "rotation"), `${path}.rotation`),
+        fits: asArray(field(record, "fits"), `${path}.fits`).map((row, index) => {
+          const fit = asRecord(row, `${path}.fits[${index}]`);
+          return {
+            residual: asNumber(field(fit, "residual"), `${path}.fits[${index}].residual`),
+            distance: asNumber(field(fit, "distance"), `${path}.fits[${index}].distance`),
+          };
+        }),
+        rms: asNumber(field(record, "rms"), `${path}.rms`),
+        worst: asNumber(field(record, "worst"), `${path}.worst`),
+        positionSigma: asNumber(field(record, "positionSigma"), `${path}.positionSigma`),
+        rotationSigma: asNumber(field(record, "rotationSigma"), `${path}.rotationSigma`),
+        spare: asInteger(field(record, "spare"), `${path}.spare`),
+        iterations: asInteger(field(record, "iterations"), `${path}.iterations`),
+      };
+    case "Refused":
+      return { t: "Refused", reason: asString(field(record, "reason"), `${path}.reason`) };
+    case "Aimed": {
+      const raw = field(record, "aim");
+      if (raw === undefined || raw === null) {
+        return { t: "Aimed", aim: null };
+      }
+      const aim = asRecord(raw, `${path}.aim`);
+      return {
+        t: "Aimed",
+        aim: {
+          pan: asInteger(field(aim, "pan"), `${path}.aim.pan`),
+          tilt: asInteger(field(aim, "tilt"), `${path}.aim.tilt`),
+          reached: asBoolean(field(aim, "reached"), `${path}.aim.reached`),
+        },
+      };
+    }
+    default:
+      throw new ProtocolFault(
+        `${path}.t`,
+        `a calibration answer this build knows, not ${JSON.stringify(tag)}`,
+      );
+  }
+}
+
 function readSeenTracker(value: unknown, path: string): SeenTracker {
   const record = asRecord(value, path);
   return {

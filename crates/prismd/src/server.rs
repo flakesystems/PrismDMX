@@ -535,6 +535,41 @@ impl Desk {
             // holds a table its own thread keeps, and the question reads it.
             // What the question adds is how many heads follow each tracker,
             // which only the show can say.
+            // B70. Worked out from the show's own reading of the head's two
+            // axes, and answering nothing the show did not already hold: a
+            // calibration changes no fixture until somebody sends a
+            // `PlaceFixtures` for it.
+            Query::CalibrationSolve {
+                fixture,
+                position,
+                rotation,
+                hold_position,
+                sightings,
+            } => Answer::Calibration {
+                fixture: *fixture,
+                answer: core.file.show.calibrate_fixture(
+                    *fixture,
+                    *position,
+                    *rotation,
+                    *hold_position,
+                    sightings,
+                ),
+            },
+            Query::CalibrationAim {
+                fixture,
+                target,
+                position,
+                rotation,
+                near,
+            } => Answer::Calibration {
+                fixture: *fixture,
+                answer: prism_domain::CalibrationAnswer::Aimed {
+                    aim: core
+                        .file
+                        .show
+                        .calibration_aim(*fixture, *target, *position, *rotation, *near),
+                },
+            },
             Query::Trackers => core.trackers_answer(),
             Query::ArtNetNodes => {
                 let supervisor = core.outputs();

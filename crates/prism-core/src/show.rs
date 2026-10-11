@@ -1080,6 +1080,132 @@ impl Show {
         Ok(ops)
     }
 
+    /// How a patched head's pan and tilt values turn into the viewer's angles -
+    /// the same reading the follow layer aims through (`prism_domain::AxisModel`)
+    /// - or `None` for a fixture that is not patched or has no pan **and** tilt.
+    #[must_use]
+    pub fn pan_tilt_axes(
+        &self,
+        id: prism_domain::FixtureId,
+    ) -> Option<(prism_domain::AxisModel, prism_domain::AxisModel)> {
+        use prism_domain::{AttributeType, AxisModel, Travel};
+        let fixture = self.fixtures.get(&id)?;
+        let fixture_type = self.fixture_types.get(&fixture.type_id)?;
+        let axis = |attribute: AttributeType, fixture_invert: bool, mirrored: bool| {
+            fixture_type
+                .attributes
+                .iter()
+                .find(|def| def.attribute == attribute && def.occurrence == 0)
+                .map(|def| AxisModel {
+                    travel: Travel {
+                        from: def.physical_from,
+                        to: def.physical_to,
+                    },
+                    invert: def.invert ^ fixture_invert,
+                    mirrored,
+                })
+        };
+        Some((
+            axis(AttributeType::Pan, fixture.invert_pan, fixture.mirror.pan)?,
+            axis(
+                AttributeType::Tilt,
+                fixture.invert_tilt,
+                fixture.mirror.tilt,
+            )?,
+        ))
+    }
+
+    /// Where a fixture hangs, from where its beam was seen to go - B70.
+    ///
+    /// Reads nothing but the fixture's pan and tilt axes; the place it starts
+    /// from is the caller's, so the same question can be asked again from a
+    /// better guess. Changes nothing: applying the answer is a
+    /// `Command::PlaceFixtures`.
+    #[must_use]
+    pub fn calibrate_fixture(
+        &self,
+        id: prism_domain::FixtureId,
+        position: prism_domain::Vec3,
+        rotation: prism_domain::Vec3,
+        hold_position: bool,
+        sightings: &[prism_domain::CalibrationSighting],
+    ) -> prism_domain::CalibrationAnswer {
+        use prism_domain::{CalibrationAnswer, Hold, Sighting, SightingFit};
+        let refused = |reason: String| CalibrationAnswer::Refused { reason };
+        let Some((pan, tilt)) = self.pan_tilt_axes(id) else {
+            return refused(format!(
+                "fixture {id} is not a moving head with a pan and a tilt"
+            ));
+        };
+        let angles: Vec<Sighting> = sightings
+            .iter()
+            .map(|sighting| Sighting {
+                target: sighting.target,
+                pan: pan.degrees_of(sighting.pan),
+                tilt: tilt.degrees_of(sighting.tilt),
+            })
+            .collect();
+        let hold = if hold_position {
+            Hold::Position
+        } else {
+            Hold::Nothing
+        };
+        match prism_domain::calibrate(position, rotation, &angles, hold) {
+            Err(error) => refused(error.to_string()),
+            Ok(fit) => CalibrationAnswer::Solved {
+                fits: fit
+                    .residuals
+                    .iter()
+                    .zip(sightings)
+                    .map(|(&residual, sighting)| SightingFit {
+                        residual,
+                        distance: ((sighting.target.x - fit.position.x).powi(2)
+                            + (sighting.target.y - fit.position.y).powi(2)
+                            + (sighting.target.z - fit.position.z).powi(2))
+                        .sqrt(),
+                    })
+                    .collect(),
+                position: fit.position,
+                rotation: fit.rotation,
+                rms: fit.rms,
+                worst: fit.worst,
+                position_sigma: fit.position_sigma,
+                rotation_sigma: fit.rotation_sigma,
+                spare: u32::try_from(fit.spare).unwrap_or(u32::MAX),
+                iterations: fit.iterations,
+            },
+        }
+    }
+
+    /// The pan and tilt values that put a head's beam through `target` if it
+    /// hangs at `position` turned `rotation` - B70, the same inversion the
+    /// follow layer does for a tracker.
+    #[must_use]
+    pub fn calibration_aim(
+        &self,
+        id: prism_domain::FixtureId,
+        target: prism_domain::Vec3,
+        position: prism_domain::Vec3,
+        rotation: prism_domain::Vec3,
+        near: Option<(u16, u16)>,
+    ) -> Option<prism_domain::AimedAt> {
+        let (pan, tilt) = self.pan_tilt_axes(id)?;
+        let (near_pan, near_tilt) = near.unwrap_or((u16::MAX / 2 + 1, u16::MAX / 2 + 1));
+        let aimed = prism_domain::aim(
+            position,
+            &prism_domain::orientation(rotation),
+            target,
+            pan.model_travel(),
+            tilt.model_travel(),
+            (pan.degrees_of(near_pan), tilt.degrees_of(near_tilt)),
+        )?;
+        Some(prism_domain::AimedAt {
+            pan: pan.value_for(aimed.pan),
+            tilt: tilt.value_for(aimed.tilt),
+            reached: aimed.reached,
+        })
+    }
+
     /// Whether a placement that has just been written touches what the follow
     /// layer is built from - S32.
     ///

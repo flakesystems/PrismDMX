@@ -27,6 +27,7 @@
 pub mod arb;
 
 mod attribute;
+mod calibration;
 mod command;
 mod console;
 mod delta;
@@ -56,6 +57,10 @@ mod wire;
 pub use attribute::{
     AttributeDef, AttributeKey, AttributeRange, AttributeType, FeatureGroup, FixtureBeam,
     FixturePhysical, FixtureType, INLINE_OCCURRENCES, MergeMode, SwitchPosition, SwitchedSlot,
+};
+pub use calibration::{
+    AimedAt, Calibrated, CalibrationAnswer, CalibrationError, CalibrationSighting, Hold, Sighting,
+    SightingFit, beam, calibrate,
 };
 pub use command::{
     Command, CommandLineMode, GoDirection, ObjectRef, OutputChange, OverwriteMode, ParamDirection,
@@ -90,8 +95,8 @@ pub use patch::{
     RgbColor, Vec3,
 };
 pub use placement::{
-    Aim, FixturePlace, FollowTarget, MAX_REACH, MAX_TRACKER, Mirror, Orientation, Travel, aim,
-    orientation, rotation_of, turn,
+    Aim, AxisModel, FixturePlace, FollowTarget, MAX_REACH, MAX_TRACKER, Mirror, Orientation,
+    Travel, aim, orientation, rotation_of, turn,
 };
 pub use playback::{PlaybackId, PlaybackTarget};
 pub use preset::{Preset, PresetPool, PresetValue};

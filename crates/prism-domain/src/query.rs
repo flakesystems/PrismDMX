@@ -484,7 +484,7 @@ pub struct CommandLineQuestion {
 }
 
 /// Something a client asks that changes nothing.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 #[serde(tag = "t", rename_all_fields = "camelCase")]
 pub enum Query {
@@ -644,6 +644,54 @@ pub enum Query {
     /// right - each tracker's position **in show space**, after the axes have
     /// been lined up - and which of them are quiet.
     Trackers,
+    /// Where a fixture really hangs, worked out from where its beam was seen to
+    /// go - **B70**, the calibration.
+    ///
+    /// A **question**, not a command: it changes nothing. The pose it answers
+    /// with is applied, if the operator likes it, by an ordinary
+    /// `PlaceFixtures` - one gesture, one Oops. Stateless on purpose: the
+    /// sightings live in the window that took them, and the daemon holds no
+    /// half-finished calibration to go stale or to disagree with a second
+    /// client's.
+    ///
+    /// The search starts from `position` and `rotation`, which the client sends
+    /// (the fixture's place now, or the last estimate) rather than the daemon
+    /// reading them off the fixture, so that the same question can be asked
+    /// again from a better guess.
+    CalibrationSolve {
+        /// The fixture the sightings are of.
+        fixture: FixtureId,
+        /// Where the search starts, in metres.
+        position: crate::Vec3,
+        /// How it starts turned, in degrees.
+        rotation: crate::Vec3,
+        /// Whether the position is held and only the rotation solved for.
+        hold_position: bool,
+        /// What the operator confirmed, in the order it happened.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(3)")
+        )]
+        sightings: Vec<crate::CalibrationSighting>,
+    },
+    /// The pan and tilt that put a fixture's beam through a point, **if the
+    /// fixture hangs where `position` and `rotation` say** - **B70**.
+    ///
+    /// What lets the desk drive a head to a mark: the better the estimate, the
+    /// nearer the beam lands, and the operator only corrects the rest.
+    CalibrationAim {
+        /// The fixture to drive.
+        fixture: FixtureId,
+        /// Where to aim, in metres of show space.
+        target: crate::Vec3,
+        /// Where the head is assumed to hang.
+        position: crate::Vec3,
+        /// How it is assumed to be turned.
+        rotation: crate::Vec3,
+        /// Pan and tilt now, as programmer values, so the nearer of two ways
+        /// round is taken. Absent means the middle of the travel.
+        near: Option<(u16, u16)>,
+    },
     /// The binding table **in force**, control by control — S38.
     ///
     /// A question rather than a field of the snapshot, and the reason is this
@@ -856,6 +904,19 @@ pub enum Answer {
             proptest(strategy = "crate::arb::small_vec(3)")
         )]
         outputs: Vec<OutputStatusInfo>,
+    },
+    /// What a calibration query found - **B70**: the pose that fits the
+    /// sightings, or why none does, or where to drive a head to hit a point.
+    Calibration {
+        /// The fixture the question was about.
+        fixture: FixtureId,
+        /// The answer. One variant, so that the two questions cost the answer
+        /// enum one value tree between them (`wire.rs`'s budget).
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        answer: crate::CalibrationAnswer,
     },
     /// The trackers this desk has heard from, lowest number first - S32.
     Trackers {

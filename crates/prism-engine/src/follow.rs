@@ -37,7 +37,9 @@
 //! quiet **keeps its last position** in the table and the head stays aimed at
 //! it, which is the specification's *hold, and do not jump*.
 
-use prism_domain::{Aim, AttributeType, Fixture, FixtureType, Orientation, Travel, Vec3, aim};
+use prism_domain::{
+    Aim, AttributeType, AxisModel, Fixture, FixtureType, Orientation, Travel, Vec3, aim,
+};
 
 use crate::cue::interpolate;
 use crate::plan::MergePlan;
@@ -50,51 +52,26 @@ use crate::tracker::TrackerTable;
 struct Axis {
     /// The merge slot.
     slot: usize,
-    /// The travel in degrees: value `0` and value `65535`.
-    travel: Travel,
-    /// Whether the encoder will invert this channel on the way out.
-    ///
-    /// The merge works **before** the invert and the head turns **after** it, so
-    /// to put the head at an angle the value to ask for is the mirror of the
-    /// angle's own when the channel is inverted. Mixing happens on the
-    /// pre-invert values, and the mirror is exact over a mix.
-    invert: bool,
-    /// Whether this axis turns the other way from the viewer's (`Mirror`).
-    ///
-    /// The aim works in the **viewer's** angles - the ones `aim` is the inverse
-    /// of - so a mirrored axis's real angle is the negative of the one the aim
-    /// asks for. Unlike `invert` it is not undone by the encoder: it is a fact
-    /// about the head and not about the cable.
-    mirrored: bool,
+    /// What a value of the slot means - shared with the calibration, which must
+    /// read the same axis the same way.
+    model: AxisModel,
 }
 
 impl Axis {
     /// The merge value that puts the axis at `degrees` (the viewer's angle)
     /// once the encoder has had its say.
     fn value_for(&self, degrees: f64) -> u16 {
-        let real = if self.mirrored { -degrees } else { degrees };
-        let value = self.travel.value(real);
-        if self.invert { u16::MAX - value } else { value }
+        self.model.value_for(degrees)
     }
 
     /// The viewer's angle a merge value turns the axis to.
     fn degrees_of(&self, value: u16) -> f64 {
-        let real = self
-            .travel
-            .degrees(if self.invert { u16::MAX - value } else { value });
-        if self.mirrored { -real } else { real }
+        self.model.degrees_of(value)
     }
 
     /// The travel in the viewer's angles, which is what `aim` chooses within.
     fn model_travel(&self) -> Travel {
-        if self.mirrored {
-            Travel {
-                from: -self.travel.to,
-                to: -self.travel.from,
-            }
-        } else {
-            self.travel
-        }
+        self.model.model_travel()
     }
 }
 
@@ -170,12 +147,14 @@ impl FollowLayer {
                         .find(|def| def.attribute == attribute && def.occurrence == 0)
                         .map(|def| Axis {
                             slot,
-                            travel: Travel {
-                                from: def.physical_from,
-                                to: def.physical_to,
+                            model: AxisModel {
+                                travel: Travel {
+                                    from: def.physical_from,
+                                    to: def.physical_to,
+                                },
+                                invert: def.invert ^ fixture_invert,
+                                mirrored,
                             },
-                            invert: def.invert ^ fixture_invert,
-                            mirrored,
                         })
                 };
             let (Some(pan), Some(tilt)) = (

@@ -172,6 +172,18 @@ pub trait ServerHandler: Send + Sync + 'static {
                 counters: prism_domain::ArtNetCounters::default(),
                 remedy: None,
             },
+            // And no show, so no fixture to place (B70): refused in words, and
+            // no head to drive.
+            Query::CalibrationSolve { fixture, .. } => Answer::Calibration {
+                fixture,
+                answer: prism_domain::CalibrationAnswer::Refused {
+                    reason: String::from("there is no show behind this connection"),
+                },
+            },
+            Query::CalibrationAim { fixture, .. } => Answer::Calibration {
+                fixture,
+                answer: prism_domain::CalibrationAnswer::Aimed { aim: None },
+            },
             // And no receiver, which is the honest answer for a handler with no
             // machine behind it (S32).
             Query::Trackers => Answer::Trackers {

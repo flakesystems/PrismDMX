@@ -245,6 +245,66 @@ impl Travel {
     }
 }
 
+/// One axis of one head as the desk's values see it: what a programmer value
+/// means in degrees, once the cable and the motor have had their say - **S32**,
+/// and the calibration's (**B70**) because the two must read an axis alike.
+///
+/// A value is the one the **merge** holds, before the encoder inverts it; the
+/// angle is the **viewer's**, the one [`aim`] is the inverse of and a
+/// [`crate::Mirror`]ed axis negates.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AxisModel {
+    /// The travel in degrees: value `0` and value `65535` of the channel.
+    pub travel: Travel,
+    /// Whether the encoder will invert this channel on the way out.
+    ///
+    /// The merge works **before** the invert and the head turns **after** it, so
+    /// to put the head at an angle the value to ask for is the mirror of the
+    /// angle's own when the channel is inverted. Mixing happens on the
+    /// pre-invert values, and the mirror is exact over a mix.
+    pub invert: bool,
+    /// Whether this axis turns the other way from the viewer's (`Mirror`).
+    ///
+    /// The aim works in the **viewer's** angles, so a mirrored axis's real
+    /// angle is the negative of the one the aim asks for. Unlike `invert` it is
+    /// not undone by the encoder: it is a fact about the head and not about the
+    /// cable.
+    pub mirrored: bool,
+}
+
+impl AxisModel {
+    /// The merge value that puts the axis at `degrees` (the viewer's angle)
+    /// once the encoder has had its say.
+    #[must_use]
+    pub fn value_for(&self, degrees: f64) -> u16 {
+        let real = if self.mirrored { -degrees } else { degrees };
+        let value = self.travel.value(real);
+        if self.invert { u16::MAX - value } else { value }
+    }
+
+    /// The viewer's angle a merge value turns the axis to.
+    #[must_use]
+    pub fn degrees_of(&self, value: u16) -> f64 {
+        let real = self
+            .travel
+            .degrees(if self.invert { u16::MAX - value } else { value });
+        if self.mirrored { -real } else { real }
+    }
+
+    /// The travel in the viewer's angles, which is what `aim` chooses within.
+    #[must_use]
+    pub fn model_travel(&self) -> Travel {
+        if self.mirrored {
+            Travel {
+                from: -self.travel.to,
+                to: -self.travel.from,
+            }
+        } else {
+            self.travel
+        }
+    }
+}
+
 /// Where a head must point, as pan and tilt in degrees — [`aim`]'s answer.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Aim {
