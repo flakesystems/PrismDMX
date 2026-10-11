@@ -48,6 +48,8 @@ import {
 import { SOFTWARE_FRAME_MS, driveStage } from "./gl/driver3d";
 import { graphics } from "./gl/graphics";
 import { Stage, webglAvailable } from "./gl/stage";
+import { CalibrationPanel } from "./calibrationpanel";
+import { marksOf } from "./marks";
 import { ResourceCache } from "./resources";
 import type { PlaceFields } from "./place";
 import {
@@ -94,6 +96,9 @@ export function Viewer3D({
 }) {
   const channel = useTelemetryChannel();
   const rig = useMemo(() => rigOf(show), [show]);
+  const marks = useMemo(() => marksOf(show), [show]);
+  // Which form sits beside the picture - client-local, like the camera.
+  const [panel, setPanel] = useState<"place" | "calibrate">("place");
   const selectionList = useMemo(() => programmer?.selection ?? [], [programmer]);
   const selection = useMemo(() => new Set(selectionList), [selectionList]);
 
@@ -289,6 +294,27 @@ export function Viewer3D({
             }}
           />
         </label>
+        <span className="viewer-panels" role="group" aria-label="Side panel">
+          {(
+            [
+              ["place", "Place", "Hang the selected fixtures where they are"],
+              ["calibrate", "Calibrate", "Work out where a moving head really hangs from where its beam lands"],
+            ] as const
+          ).map(([name, label, title]) => (
+            <button
+              key={name}
+              type="button"
+              data-testid={`viewer-panel-${name}`}
+              aria-pressed={panel === name}
+              title={title}
+              onClick={() => {
+                setPanel(name);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </span>
         <p ref={readoutRef} className="viewer-readout" data-testid="viewer-stats" />
       </div>
       <div className="viewer-body">
@@ -350,7 +376,14 @@ export function Viewer3D({
             });
           }}
         />
-        <PlacePanel rig={rig} selection={selectionList} />
+        <PlacePanel rig={rig} selection={selectionList} visible={panel === "place"} />
+        <CalibrationPanel
+          rig={rig}
+          marks={marks}
+          programmer={programmer}
+          selection={selectionList}
+          visible={panel === "calibrate"}
+        />
       </div>
     </div>
   );
@@ -360,9 +393,11 @@ export function Viewer3D({
 function PlacePanel({
   rig,
   selection,
+  visible,
 }: {
   readonly rig: readonly RigFixture[];
   readonly selection: readonly number[];
+  readonly visible: boolean;
 }) {
   const send = useSend();
   const chosen = useMemo(() => selectedFixtures(rig, selection), [rig, selection]);
@@ -427,7 +462,7 @@ function PlacePanel({
   );
 
   return (
-    <aside className="viewer-place" data-testid="viewer-place">
+    <aside className="viewer-place" data-testid="viewer-place" hidden={!visible}>
       <p className="viewer-selection" data-testid="viewer-place-selection">
         {chosen.length === 0
           ? "Select fixtures to place them — click them here, in the Fixture Sheet or on the line."

@@ -200,6 +200,8 @@ release. They are listed so that nobody testing a build of it is surprised.
 
 ## B70 — no workflow for calibrating a fixture's 3D position
 
+**Fixed for the next release.** *Calibrate* in the Viewer 3D works out where a moving head really hangs from marks you aim its beam at (operator's manual, chapter 8).
+
 **Where:** 3D viewer, rig.
 **Severity:** annoying.
 

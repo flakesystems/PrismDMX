@@ -257,6 +257,7 @@ type Command =
   | { t: "UnpatchFixture"; id: FixtureId }
   | { t: "RenumberFixture"; id: FixtureId; to: FixtureId }
   | { t: "PlaceFixtures"; placements: FixturePlace[] }  // S30: where they hang, one Oops
+  | { t: "EditMarks"; set: Mark[]; remove: MarkId[] }    // B70: the show's reference points, one Oops
   | { t: "EmbedFixtureType"; typeId: string }
   | { t: "Oops" } | { t: "Redo" }   // Oops: the line's last word while one stands (B58)
   // ---- The show file (S37) — only the first of the five existed before ----
@@ -977,6 +978,8 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 
 > **`Delta::SwitchPositions` — which row a switched knob reads** *(punch-list B52)*. A switching channel (OFL's `switchChannels`) makes one slot a different channel depending on another channel's value. The slot's **key** does not follow — a cue files its value under one key while it runs — but its **name and named steps** do: `AttributeDef::switched` carries, per position of the deciding channel (`by`, an offset in the footprint), the label and the ranges the slot has then. Which position is live is read **off the cable** by the daemon, on the loop that already holds the telemetry frame, whether or not a client listens; the delta carries the whole list `{ fixture, offset, position | null }` and is sent only when it changes, and `Snapshot::switchPositions` carries the same list (`#[serde(default)]`). A client reads the label out of the profile it already mirrors. Every profile embedded before B52 has no table and keeps its one name.
 
+> **`EditMarks`, `CalibrationSolve` and `CalibrationAim` — where a head really hangs** *(B70)*. A `Mark` is a point of the room whose place is known (`{ id, name, position }`, metres of show space): the **show's**, in a pool of its own (`/marks/N` in the document, always present, `{}` while empty; `UndoScope::Mark`). `EditMarks` adds, replaces and removes any number of them as **one** Oops: removals first, so a number in both comes back as the new mark; a name over 64 characters, a coordinate that is not a number or further than `MAX_REACH`, or a pool past 512 refuses **the whole gesture**; a mark set to what it already is writes nothing and files no step; no `Effect`, since a mark moves no channel. The two questions change nothing and hold no state between them — the calibration's sightings live in the window that took them. `CalibrationSolve` carries the pose to start from, whether the position is held, and each sighting as the **mark's place plus the programmer values** of pan and tilt (`0..65535`, before the cable inverts them): the daemon reads them through the profile's travel, `invert` and the fixture's `Mirror` (`prism_domain::AxisModel`, the follow layer's own reading). Its answer is `Solved { position, rotation, fits[{ residual, distance }], rms, worst, positionSigma, rotationSigma, spare, iterations }` or `Refused { reason }` in the daemon's own words (fewer than 3 sightings, or 2 with the position held; marks in a line; a mark on the fixture; a fixture without pan and tilt). `spare` is the number of equations beyond the unknowns — **nought means nothing was checked**. `CalibrationAim` answers `Aimed { aim: { pan, tilt, reached } | null }` — the programmer values that put the beam through `target` if the head hangs as sent — and `null` for a fixture that cannot be driven or a point on the fixture itself. Applying a result is an ordinary `PlaceFixtures`.
+
 > **`PlaceFixtures` carries the tracker too** *(S32)*. A `FixturePlace` has an optional `follow: { tracker, offset }` — the PSN tracker the head is aimed at and where on the performer — beside `position` and `rotation`, **whole**, so a drag of a following head leaves it following and a tracker panel carries the place it found. Absent means *no tracker*. The daemon answers with `ShowPatch` operations (`add` or `replace` of `/fixtures/N/follow`, or `remove`), and — unlike a placement of heads that follow nothing — with `Effect::Refollow` when the placement set or cleared a tracker or moved a head that has one: the follow layer is rebuilt and handed to the tick alone, **not** the merge body, so a running cue list is not stopped. A tracker above 1023 or an offset off the stage refuses the whole list.
 >
 > **And which axes run the other way** *(S32)*. A `FixturePlace` also has an optional `mirror: { pan, tilt }` (`prism_domain::Mirror`, both default `false`): the head's motor turns the other way from the viewer's convention. Absent means neither and is **not written** to a show file, so a show that never mirrors a head is byte for byte what it was. The daemon answers with `ShowPatch` operations on `/fixtures/N/mirror` — `add` for the first, `replace` after, `remove` when neither is left — and with `Effect::Refollow` only for a head that has a tracker: the follow layer aims through the mirror (`Axis::mirrored`) so the real head ends up on the performer, which is the one thing the mirror changes outside the picture. It changes **no value on the cable**, which is what separates it from `Fixture::invertPan`/`invertTilt`.
@@ -1113,6 +1116,10 @@ type Query =
   | { t: "OutputStatus" }
   | { t: "ArtNetNodes" }
   | { t: "Trackers" }                                                  // S32
+  | { t: "CalibrationSolve"; fixture: FixtureId; position: Vec3; rotation: Vec3;   // B70
+      holdPosition: boolean; sightings: CalibrationSighting[] }
+  | { t: "CalibrationAim"; fixture: FixtureId; target: Vec3; position: Vec3;       // B70
+      rotation: Vec3; near: [number, number] | null }
   | { t: "SurfaceBindings" }
   | { t: "CueTracking"; sequenceId: SequenceId }
   | { t: "CommandLineReading"; text: string }
@@ -1143,6 +1150,7 @@ type Answer =
   | { t: "SurfaceBindings"; controls: SurfaceControl[]; device: string;
       profile: string | null; revision: number; learning: boolean }
   | { t: "CueTracking"; sequenceId: SequenceId; cues: CueTrackingRow[] }
+  | { t: "Calibration"; fixture: FixtureId; answer: CalibrationAnswer }  // B70
   | { t: "CommandLineReading"; text: string; reading: string;
       kind: "Empty" | "Commands" | "Error"; commands: number;
       verb: boolean; clearing: boolean;

@@ -66,7 +66,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use prism_domain::{
-    Delta, Executor, ExecutorId, Fixture, FixtureType, Group, Preset, Sequence, SequenceId,
+    Delta, Executor, ExecutorId, Fixture, FixtureType, Group, Mark, Preset, Sequence, SequenceId,
     Session, SessionId, View, ViewId,
 };
 use rusqlite::{Connection, OpenFlags, Transaction};
@@ -150,7 +150,9 @@ impl From<rusqlite::Error> for StoreError {
 /// - **Version 2** adds the session (`ARCHITECTURE_SPEC.md` §4.1) and the views
 ///   it selects between. A version-1 file therefore opens in the session a
 ///   fresh desk starts in, which is the only honest answer: it never had one.
-pub const MIGRATIONS: [&str; 2] = [
+/// - **Version 3** adds the stage marks a head is calibrated against (B70). A
+///   file from before opens with none, which is what it had.
+pub const MIGRATIONS: [&str; 3] = [
     "CREATE TABLE fixture_type (id TEXT PRIMARY KEY NOT NULL, document BLOB NOT NULL) STRICT;
      CREATE TABLE fixture      (id INTEGER PRIMARY KEY NOT NULL, document BLOB NOT NULL) STRICT;
      CREATE TABLE fixture_group(id INTEGER PRIMARY KEY NOT NULL, document BLOB NOT NULL) STRICT;
@@ -159,6 +161,7 @@ pub const MIGRATIONS: [&str; 2] = [
      CREATE TABLE executor     (id INTEGER PRIMARY KEY NOT NULL, document BLOB NOT NULL) STRICT;",
     "CREATE TABLE session      (id INTEGER PRIMARY KEY NOT NULL, document BLOB NOT NULL) STRICT;
      CREATE TABLE stored_view  (id INTEGER PRIMARY KEY NOT NULL, document BLOB NOT NULL) STRICT;",
+    "CREATE TABLE mark         (id INTEGER PRIMARY KEY NOT NULL, document BLOB NOT NULL) STRICT;",
 ];
 
 /// The show tables, in the order a load walks them.
@@ -173,6 +176,9 @@ const SHOW_TABLES: [&str; 6] = [
 
 /// The session tables, added in version 2.
 const SESSION_TABLES: [&str; 2] = ["session", "stored_view"];
+
+/// The stage-mark table, added in version 3.
+const MARK_TABLES: [&str; 1] = ["mark"];
 
 /// A show file, open.
 ///
@@ -495,6 +501,7 @@ impl ShowStore {
             self.rows_by_id("preset", |preset: &Preset| preset.id)?,
             self.rows_by_id("sequence", |sequence: &Sequence| sequence.id)?,
             self.rows_by_id("executor", |executor: &Executor| executor.id)?,
+            self.rows_by_id("mark", |mark: &Mark| mark.id)?,
         );
         self.carry_levels_onto_their_cue_lists(&mut show)?;
         let sessions: BTreeMap<SessionId, Session> =
@@ -734,6 +741,7 @@ struct Rows {
     presets: Vec<(i64, Vec<u8>)>,
     sequences: Vec<(i64, Vec<u8>)>,
     executors: Vec<(i64, Vec<u8>)>,
+    marks: Vec<(i64, Vec<u8>)>,
     session: Vec<(i64, Vec<u8>)>,
     views: Vec<(i64, Vec<u8>)>,
 }
@@ -748,6 +756,7 @@ impl Rows {
             presets: numbered(show.presets(), |value: &Preset| value.id.get())?,
             sequences: numbered(show.sequences(), |value: &Sequence| value.id.get())?,
             executors: numbered(show.executors(), |value: &Executor| value.id.get())?,
+            marks: numbered(show.stage_marks(), |value: &Mark| value.id.get())?,
             session: numbered(
                 core::iter::once(file.session.session()),
                 |value: &Session| value.id.get(),
@@ -762,7 +771,11 @@ impl Rows {
     /// is in memory, and a row left behind by an entity the operator deleted
     /// would come back the next time the file was opened.
     fn write(&self, transaction: &Transaction<'_>) -> Result<(), StoreError> {
-        for table in SHOW_TABLES.iter().chain(SESSION_TABLES.iter()) {
+        for table in SHOW_TABLES
+            .iter()
+            .chain(SESSION_TABLES.iter())
+            .chain(MARK_TABLES.iter())
+        {
             transaction.execute(&format!("DELETE FROM {table}"), [])?;
         }
         for (id, document) in &self.fixture_types {
@@ -777,6 +790,7 @@ impl Rows {
             ("preset", &self.presets),
             ("sequence", &self.sequences),
             ("executor", &self.executors),
+            ("mark", &self.marks),
             ("session", &self.session),
             ("stored_view", &self.views),
         ] {

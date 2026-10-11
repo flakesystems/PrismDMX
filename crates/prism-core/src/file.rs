@@ -1338,6 +1338,16 @@ impl ShowFile {
                 .filter_map(|place| self.show.place_of(place.id))
                 .map(Image::Place)
                 .collect(),
+            // B70's: the marks the command touches, set or removed, as they
+            // stand - an undo puts each back or takes it out again.
+            Command::EditMarks { set, remove } => set
+                .iter()
+                .map(|mark| mark.id)
+                .chain(remove.iter().copied())
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .map(|id| Image::Mark(id, self.show.stage_mark(id).cloned()))
+                .collect(),
             Command::EmbedFixtureType { type_id } => vec![Image::FixtureType(
                 type_id.clone(),
                 self.show.fixture_type(type_id).cloned().map(Box::new),
@@ -2046,6 +2056,15 @@ impl ShowFile {
                     applied.deltas.push(Delta::ShowPatch { ops });
                     applied.effects.push(Effect::ReloadGroups);
                 }
+                Image::Mark(id, mark) => {
+                    let ops = match mark {
+                        Some(mark) => self.show.edit_marks(core::slice::from_ref(mark), &[])?,
+                        None => self.show.edit_marks(&[], &[*id])?,
+                    };
+                    if !ops.is_empty() {
+                        applied.deltas.push(Delta::ShowPatch { ops });
+                    }
+                }
                 Image::Executor(id, executor) => {
                     let ops = match executor {
                         Some(executor) => self.show.store_executor(executor.clone())?,
@@ -2105,6 +2124,7 @@ impl ShowFile {
                 | Image::Sequence(..)
                 | Image::Preset(..)
                 | Image::Group(..)
+                | Image::Mark(..)
                 | Image::Executor(..) => {}
             }
         }

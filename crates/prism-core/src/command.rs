@@ -681,6 +681,17 @@ impl Show {
                 }
                 Ok(applied)
             }
+            // B70's: stage marks move no channel and no head, so like a
+            // placement the engine is not told - and unlike one, there is no
+            // case in which it needs to be.
+            Command::EditMarks { set, remove } => {
+                let ops = self.edit_marks(set, remove)?;
+                if ops.is_empty() {
+                    // Where they already were - `PlaceFixtures`' rule.
+                    return Ok(Applied::default());
+                }
+                Ok(Applied::patch(ops))
+            }
             // The library is `ShowFile`'s, so this is validated as far as the
             // show can see it — which is not far: a key is a key. See
             // [`Effect::EmbedProfile`].

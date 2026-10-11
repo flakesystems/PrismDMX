@@ -237,6 +237,10 @@ is being told, whatever told it: the programmer, a cue, a master.
   sent with the place (one Oops) and kept when you correct its address. A
   selection whose heads disagree shows the box half-filled; clicking it sets
   every selected head.
+- **Calibrate.** The **Calibrate** button beside the view buttons swaps the
+  panel for the one that works out **where a moving head really hangs** from
+  where its beam really lands — see *Calibrating a head* in chapter 8.
+  **Place** swaps back; each panel keeps what you had typed in it.
 - **What the numbers mean.** Metres, measured from a point you choose — the
   middle of the stage front at floor level is a good one. **X** runs across the
   stage (positive is stage left, which is the audience's right), **Y** is height
@@ -753,6 +757,67 @@ is part of the way. A head with no tracker given to it does nothing with it.
   not say which way is up or what a unit is, and a default is a guess. Check the
   mapping against one performer and the list before a show — the installer's
   manual has the steps.
+
+### Calibrating a head: where it really hangs
+
+A tracker is only as good as the place its head is hung at. A head whose
+position is two metres out, or that is turned ten degrees from what the show
+says, is drawn wrongly and is aimed at the performer wrongly. *Calibrate* in the
+*Viewer 3D* works out the real position and rotation from where the beam really
+lands — what a rigger does with a tape and a torch, with the arithmetic done by
+the desk.
+
+**Marks.** First tell the desk about points of the room that you can put a beam
+on and whose place you know: spike tape on the floor, the corner of a platform,
+a cleat on the truss. A mark has an optional name and a place in metres from the
+same origin as the rig — **X** across the stage, **Y** up from the floor (nought
+for a mark on the floor), **Z** upstage. **Marks belong to the show**, not to
+one head: enter them once and every head is calibrated against the same ones.
+*Add mark*, *Edit* and *Delete* are one Oops each.
+
+**Sightings.** Select **one** moving head — several are refused, because driving
+a head moves everything that is selected. Then, for each mark:
+
+1. **Aim** drives the head at the mark from the best estimate there is of where
+   it hangs: at first the place the show has, afterwards the latest result. The
+   beam lands near the mark and rarely on it.
+2. Trim **Pan** and **Tilt** — with the encoders, the jog wheel or the line
+   (`Fixture 5 Pan At 41.2`) — until the beam is on the real mark.
+3. **Take** keeps the pan and tilt the programmer now holds as that mark's
+   sighting. Taking the same mark again replaces it; **Forget** drops it.
+
+**How many.** Three sightings find both the position and the rotation. **Two**
+are enough if you already *know the position* — tick **Position is known** (from
+the plan or a tape measure) — and only want the rotation. Three is exactly
+enough, though, and then a mistake in one mark goes unnoticed: **take a fourth**,
+put the marks well apart and **not all in one line**, and if you can at
+different heights. The desk refuses sightings that cannot decide the answer
+rather than guessing one.
+
+**The result** appears under the marks as soon as there are enough sightings:
+where the head hangs, how it is turned, and what to make of it.
+
+- **Green** — the sightings agree to within half a degree and the position is
+  good to about thirty centimetres or better.
+- **Amber** — usable, not exact: the sightings agree only roughly; or nothing
+  was left over to check them against (*take one more*); or the position is
+  uncertain (*use marks further apart or at different heights, or hold a
+  position you have measured*).
+- **Red** — the sightings disagree by more than a degree and a half on average.
+  The panel names the mark that is furthest out: its place is wrong, or the beam
+  was not on it. Check it, or **Forget** it and take it again. The number beside
+  every sighting is how many degrees that one is out.
+
+**Apply** hangs the head where the sightings say it hangs — position and
+rotation, in **one** step; its tracker and its *Runs the other way* boxes are
+left as they were — and **Oops** takes it back. **Start over** forgets every
+sighting. Sightings belong to the window, not to the show: they are not saved,
+and selecting a different head starts again.
+
+**Good to know.** Pan and tilt are read through the same axes a tracker is aimed
+through, so a head set to *Runs the other way* is calibrated exactly as it is
+aimed. The desk does not move a head by itself, does not look at the stage with a
+camera, and does not draw the marks in the 3D picture yet.
 
 ---
 

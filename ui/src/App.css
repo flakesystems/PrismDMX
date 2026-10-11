@@ -3378,6 +3378,101 @@
     }
 }
 
+/* A panel that is not the one showing keeps its state and takes no room: the
+   rule above sets `display`, which would otherwise beat the `hidden` attribute. */
+.viewer-place[hidden] {
+    display: none;
+}
+
+.viewer-panels {
+    display: inline-flex;
+    gap: 0.15rem;
+}
+
+.viewer-panels button[aria-pressed="true"] {
+    background: var(--edge-lit);
+    font-weight: 600;
+}
+
+/* Calibration - B70. Wider than the place form, because a mark is a name, a
+   place and four buttons. */
+.viewer-calibration {
+    flex-basis: 19rem;
+}
+
+.calibration-marks {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.calibration-marks li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.2rem 0.3rem;
+    border: 1px solid var(--edge);
+}
+
+.calibration-marks small,
+.calibration-sighting {
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.calibration-none {
+    color: var(--ink-dim);
+    border-style: dashed;
+}
+
+.calibration-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem;
+}
+
+.calibration-buttons button {
+    padding: 0.1rem 0.4rem;
+    font-size: 0.75rem;
+}
+
+.calibration-form {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.calibration-form .viewer-field:first-of-type {
+    grid-column: 1 / -1;
+}
+
+.calibration-wide {
+    grid-column: 1 / -1;
+}
+
+.calibration-result {
+    padding: 0.25rem 0.35rem;
+    border: 1px solid var(--edge);
+    font-size: 0.78rem;
+}
+
+.calibration-result p {
+    margin: 0 0 0.2rem;
+}
+
+.calibration-result[data-level="good"] {
+    border-color: var(--ok);
+}
+
+.calibration-result[data-level="warn"] {
+    border-color: var(--warn);
+}
+
+.calibration-result[data-level="bad"] {
+    border-color: var(--bad);
+}
+
 /* Viewer 3D's two per-screen settings — S30b. */
 .viewer-setting {
     display: flex;

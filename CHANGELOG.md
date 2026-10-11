@@ -22,6 +22,19 @@ Alle Versionen bisher sind **Vorabversionen**.
 
 ## Noch nicht veröffentlicht
 
+- **Einen Kopf kalibrieren (Viewer 3D):** der Knopf **Calibrate** rechnet aus dem
+  Ort, wo der Strahl wirklich landet, aus, **wo ein Moving Head wirklich hängt**
+  und wie er gedreht ist (B70, GitHub #42). Sie legen **Marks** an — Punkte des
+  Raums mit bekanntem Ort: Spike-Tape, die Ecke eines Podests —, lassen das Pult
+  den Kopf mit **Aim** darauf fahren, trimmen Pan und Tilt, bis der Strahl auf der
+  echten Mark liegt, und nehmen ihn mit **Take**. Ab drei Marks (zwei, wenn Sie
+  die Position schon kennen) steht die Pose da, mit einer Ampel, wie sehr man ihr
+  trauen kann und welche Mark danebenliegt; **Apply** hängt den Kopf dorthin — ein
+  Oops. Jede weitere Mark verbessert die Schätzung, von der das nächste **Aim**
+  ausgeht. Die Marks gehören der **Show** (eigene Tabelle in der `.prism`-Datei,
+  Version 3; ältere Dateien öffnen sich ohne Marks), nicht dem Kopf. *Nur an
+  berechneten Strahlen geprüft*, noch an keinem echten Kopf (Handbuch, Kapitel 8).
+
 - **Tracker (PSN):** ein Tracking-System — openfollow.app oder alles, was
   PosiStageNet spricht — kann jetzt Moving Heads führen. *Settings → Trackers*
   schaltet den Empfänger ein (Gruppe, Port, Schnittstelle, die Achsen und die

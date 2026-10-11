@@ -498,6 +498,8 @@ fn command_group_3() -> BoxedStrategy<crate::Command> {
         (any::<FixtureId>(), any::<FixtureId>()).prop_map(|(id, to)| C::RenumberFixture { id, to }),
         any::<String>().prop_map(|type_id| C::EmbedFixtureType { type_id }),
         small_vec::<crate::FixturePlace>(3).prop_map(|placements| C::PlaceFixtures { placements }),
+        (small_vec::<crate::Mark>(3), small_vec::<crate::MarkId>(3))
+            .prop_map(|(set, remove)| C::EditMarks { set, remove }),
         Just(C::Oops),
         Just(C::Redo),
     ]

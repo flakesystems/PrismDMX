@@ -35,7 +35,21 @@ import { crc32 } from "node:zlib";
  * of a document, and a document assembled by this file would be a reading of
  * this file's idea of one.
  */
-export function description(manufacturer: string, name: string): string {
+export function description(
+  manufacturer: string,
+  name: string,
+  options: { readonly tilt?: boolean } = {},
+): string {
+  // A moving head's second axis, only for a test that calibrates one (B70):
+  // every other test patches the head as the four-channel fixture it always was.
+  const tilt = options.tilt
+    ? `
+          <DMXChannel Offset="5,6">
+            <LogicalChannel Attribute="Tilt">
+              <ChannelFunction Attribute="Tilt" PhysicalFrom="-135" PhysicalTo="135"/>
+            </LogicalChannel>
+          </DMXChannel>`
+    : "";
   const identity = "{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <GDTF DataVersion="1.2">
@@ -82,7 +96,7 @@ export function description(manufacturer: string, name: string): string {
                 <ChannelSet DMXFrom="10/1" WheelSlotIndex="2"/>
               </ChannelFunction>
             </LogicalChannel>
-          </DMXChannel>
+          </DMXChannel>${tilt}
         </DMXChannels>
       </DMXMode>
     </DMXModes>

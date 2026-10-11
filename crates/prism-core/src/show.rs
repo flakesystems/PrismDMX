@@ -24,7 +24,7 @@
 //! daemon*, not the show, and are excluded from the serialised form. A reloaded
 //! show starts at revision 0 and clean.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use prism_domain::{
@@ -44,6 +44,8 @@ pub(crate) const FIXTURE_TYPES: &str = "fixtureTypes";
 pub(crate) const FIXTURES: &str = "fixtures";
 /// Wire name of the group pool.
 pub(crate) const GROUPS: &str = "groups";
+/// Wire name of the stage-mark pool - B70.
+pub(crate) const MARKS: &str = "marks";
 /// Wire name of the preset pools.
 pub(crate) const PRESETS: &str = "presets";
 /// Wire name of the sequence pool.
@@ -143,6 +145,12 @@ pub enum ShowError {
     /// than `prism_domain::MAX_REACH` — S30. Named by the fixture it was for,
     /// because a spread of eight that refuses has to say which one.
     FixtureOutOfReach(prism_domain::FixtureId),
+    /// A stage mark with a name that is too long or a place that is not a number
+    /// within `prism_domain::MAX_REACH` - B70. Named by its number, because an
+    /// edit of eight marks that refuses has to say which.
+    InvalidMark(prism_domain::MarkId),
+    /// An edit that would leave more than `prism_domain::MAX_MARKS` marks - B70.
+    TooManyMarks,
     /// A `Command::PatchFixtures` with no fixture in it — S57. Refused rather
     /// than applied as nothing, because a gesture that did nothing would still
     /// be a step for Oops to take back.
@@ -302,6 +310,15 @@ impl fmt::Display for ShowError {
                 "fixture {id} cannot hang there: every coordinate must be a number within {} m",
                 prism_domain::MAX_REACH
             ),
+            Self::InvalidMark(id) => write!(
+                f,
+                "mark {id} cannot be kept: its name may be {} characters at most and every                  coordinate must be a number within {} m",
+                prism_domain::MAX_MARK_NAME,
+                prism_domain::MAX_REACH
+            ),
+            Self::TooManyMarks => {
+                write!(f, "a show holds at most {} marks", prism_domain::MAX_MARKS)
+            }
             Self::UnknownLibraryType(id) => {
                 write!(f, "this desk carries no profile {id:?}")
             }
@@ -372,6 +389,10 @@ pub struct Show {
     sequences: BTreeMap<SequenceId, Sequence>,
     /// The executor grid.
     executors: BTreeMap<ExecutorId, Executor>,
+    /// The stage marks a head is calibrated against - B70. Absent from a show
+    /// written before there were any, which reads as none.
+    #[serde(default)]
+    marks: BTreeMap<prism_domain::MarkId, prism_domain::Mark>,
     /// Counts patch changes. Not show content - see the module documentation.
     #[serde(skip)]
     patch_revision: u64,
@@ -467,6 +488,7 @@ impl Show {
         presets: BTreeMap<PresetId, Preset>,
         sequences: BTreeMap<SequenceId, Sequence>,
         executors: BTreeMap<ExecutorId, Executor>,
+        marks: BTreeMap<prism_domain::MarkId, prism_domain::Mark>,
     ) -> Self {
         Self {
             fixture_types,
@@ -475,6 +497,7 @@ impl Show {
             presets,
             sequences,
             executors,
+            marks,
             // Neither is show content (see the module documentation): a show
             // that has just been read has nothing unsaved in it, and the
             // revision counts this run's patch changes.
@@ -505,6 +528,17 @@ impl Show {
     #[must_use]
     pub fn fixture(&self, id: prism_domain::FixtureId) -> Option<&Fixture> {
         self.fixtures.get(&id)
+    }
+
+    /// The stage marks, in number order - B70.
+    pub fn stage_marks(&self) -> impl Iterator<Item = &prism_domain::Mark> {
+        self.marks.values()
+    }
+
+    /// One stage mark.
+    #[must_use]
+    pub fn stage_mark(&self, id: prism_domain::MarkId) -> Option<&prism_domain::Mark> {
+        self.marks.get(&id)
     }
 
     /// The groups, in number order.
@@ -1226,6 +1260,68 @@ impl Show {
                 self.fixture(id)
                     .is_some_and(|fixture| fixture.follow.is_some())
             })
+    }
+
+    /// Adds, replaces and removes stage marks - `Command::EditMarks`, B70.
+    ///
+    /// Everything is checked before anything is written, so a refusal leaves the
+    /// show exactly as it was. Removals are made first, so a number in both
+    /// lists comes back as the new mark; a removal of a number that is not there
+    /// writes nothing, and a mark set to what it already is writes nothing. A
+    /// mark named twice ends as its **last** entry.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::InvalidMark`] for a mark that is not valid, and
+    /// [`ShowError::TooManyMarks`] for an edit that would pass the limit.
+    pub fn edit_marks(
+        &mut self,
+        set: &[prism_domain::Mark],
+        remove: &[prism_domain::MarkId],
+    ) -> Result<Vec<JsonPatchOp>, ShowError> {
+        if let Some(bad) = set.iter().find(|mark| !mark.is_valid()) {
+            return Err(ShowError::InvalidMark(bad.id));
+        }
+        let mut after: BTreeMap<prism_domain::MarkId, &prism_domain::Mark> =
+            self.marks.iter().map(|(id, mark)| (*id, mark)).collect();
+        for id in remove {
+            after.remove(id);
+        }
+        for mark in set {
+            after.insert(mark.id, mark);
+        }
+        if after.len() > prism_domain::MAX_MARKS {
+            return Err(ShowError::TooManyMarks);
+        }
+        // What the *document* has, as a client sees it: a removal that is
+        // followed by a set of the same number writes no operation of its own,
+        // so the member stays in the document and the set replaces it.
+        let mut in_document: BTreeSet<prism_domain::MarkId> = self.marks.keys().copied().collect();
+        let mut ops = Vec::new();
+        for id in remove {
+            if self.marks.remove(id).is_some() && !set.iter().any(|mark| mark.id == *id) {
+                in_document.remove(id);
+                ops.push(JsonPatchOp::Remove {
+                    path: pointer(MARKS, &id.to_string()),
+                });
+            }
+        }
+        for mark in set {
+            if self.marks.get(&mark.id) == Some(mark) {
+                continue;
+            }
+            ops.push(put(
+                pointer(MARKS, &mark.id.to_string()),
+                mark,
+                in_document.contains(&mark.id),
+            )?);
+            in_document.insert(mark.id);
+            self.marks.insert(mark.id, mark.clone());
+        }
+        if !ops.is_empty() {
+            self.touch();
+        }
+        Ok(ops)
     }
 
     /// Stores a group, replacing one with the same number.
@@ -2503,6 +2599,8 @@ mod tests {
             // sentence rather than with a silence.
             ShowError::FixtureNumberInUse(FixtureId::new(1)),
             ShowError::FixtureOutOfReach(FixtureId::new(1)),
+            ShowError::InvalidMark(prism_domain::MarkId::new(1)),
+            ShowError::TooManyMarks,
             ShowError::UnknownLibraryType("generic.par".to_owned()),
             ShowError::UnknownCue {
                 sequence: SequenceId::new(1),
@@ -2566,6 +2664,7 @@ mod tests {
                 "fixtureTypes",
                 "fixtures",
                 "groups",
+                "marks",
                 "presets",
                 "sequences",
             ]

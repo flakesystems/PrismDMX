@@ -244,6 +244,22 @@ pub fn show_commands() -> Vec<Command> {
                 mirror: prism_domain::Mirror::default(),
             }],
         },
+        // B70's: two spike marks, the second of them named.
+        Command::EditMarks {
+            set: vec![
+                prism_domain::Mark {
+                    id: prism_domain::MarkId::new(1),
+                    name: String::new(),
+                    position: Vec3::new(-2.0, 0.0, 3.0),
+                },
+                prism_domain::Mark {
+                    id: prism_domain::MarkId::new(2),
+                    name: "DS centre".to_owned(),
+                    position: Vec3::new(0.0, 0.0, -3.0),
+                },
+            ],
+            remove: Vec::new(),
+        },
         Command::EmbedFixtureType {
             type_id: "generic.rgb.par".to_owned(),
         },

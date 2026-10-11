@@ -63,8 +63,10 @@ fn the_three_groups_together_are_the_whole_protocol() {
         // asserts is show content, and `docs/IPC_PROTOCOL.md` §5 has the
         // argument against the machine group in full; sixty-**five** since
         // S29's `Shutdown`; sixty-**six** since S30's `PlaceFixtures`, a
-        // show command because where a light hangs is part of the rig.
-        66
+        // show command because where a light hangs is part of the rig;
+        // sixty-**seven** since B70's `EditMarks`, a show command for the same
+        // reason - where the room's reference points are is part of the show.
+        67
     );
     for command in show_commands() {
         assert!(!command.is_session_command(), "{command:?}");

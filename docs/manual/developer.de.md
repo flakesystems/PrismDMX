@@ -316,6 +316,56 @@ Ein Browser ohne WebGL — und jeder Unit-Test — bekommt das 2D-Bild aus S30
 hinter `viewer/surface.ts::ViewSurface`; die Gründe für beides stehen in §4.7
 der Spezifikation.
 
+
+### Einen Kopf zu kalibrieren ist eine Frage, und die Marks gehören der Show — B70
+
+Wo ein Kopf wirklich hängt, wird aus dem Ort errechnet, wo sein Strahl gesehen
+wurde. Drei Regeln sind daraus geworden:
+
+- **Der Löser ist rein und liegt in `prism-domain`** (`calibration.rs`):
+  Sightings hinein, eine Pose und ihre Güte heraus. Er ist das Joch des Viewers,
+  zweimal rückwärts gerechnet — `beam(pan, tilt)` ist `aim` umgekehrt, und eine
+  Pose stimmt, wenn `R · beam ∥ (Mark − Position)` für jedes Sighting gilt —,
+  gelöst mit Levenberg–Marquardt und analytischer Jacobi-Matrix, vom Ort der
+  Show aus und aus drei Vierteldrehungen der Ausrichtung. Was er **ablehnt**, ist
+  so sehr Vertrag wie das, was er beantwortet: Marks auf einer Linie, dasselbe
+  Sighting zweimal, eine Lösung, die sich auf einer Mark festsetzt oder an den
+  Rand der Bühne läuft, sind `Underdetermined` — nie eine Antwort, die vom
+  Startwert abhängt. Die Tests sind eine Eigenschaft über beliebige Posen (eine
+  Pose übersteht den Hin-und-zurück-Weg auf 1e-3 m), die Ablehnungen und eine
+  vertippte Mark, die als das eine große Residuum auffällt.
+- **Zwei Fragen, kein Befehl, eine Antwortvariante.** `Query::CalibrationSolve`
+  und `Query::CalibrationAim` ändern nichts; die Pose wird durch ein gewöhnliches
+  `PlaceFixtures` angewendet (ein Oops). Beide beantwortet `Answer::Calibration`,
+  dessen Nutzlast ein einziges geboxtes Enum ist — **eine zweite `Answer`-Variante
+  überschritt das Wertbaum-Budget von `wire.rs` um 64 Bytes**, die erste um 700,
+  bis ihre Nutzlast geboxt war. `Query` verlor `Eq` (sie trägt einen `Vec3`).
+  Sightings sind **Programmer-Werte**, keine Grad: nur der Daemon kennt den
+  Verfahrweg des Profils, einen invertierten Kanal und eine gespiegelte Achse,
+  und `prism_domain::AxisModel` ist diese Lesart, **geteilt mit der
+  Follow-Schicht** — ein Kopf, den die Kalibrierung auf eine Mark fährt, und ein
+  Kopf, den S32 auf einen Tracker richtet, können nicht uneins sein, was ein
+  Pan-Wert ist.
+- **Marks sind ein Pool der Show**, `Show::marks` (`prism_domain::Mark`,
+  `MarkId`), bearbeitet durch einen `Command::EditMarks { set, remove }`:
+  ganz abgelehnt oder ganz angewendet, ein Oops, `UndoScope::Mark`, kein
+  `Effect`. Sie sind eine siebte Sammlung im Show-Dokument (`/marks/N`, immer
+  vorhanden, `{}` wenn leer — ein JSON-Patch-`add` braucht seinen Vater), eine
+  **eigene Tabelle in der `.prism`-Datei**, und damit ist
+  `ShowStore::FORMAT_VERSION` **3**: Migration 3 fügt nur die Tabelle hinzu,
+  eine Datei der Version 1 oder 2 öffnet sich also ohne Marks. `Show` liest ein
+  Dokument ohne `marks` als ohne (`#[serde(default)]`).
+
+Das Fenster behält die *Sightings*; der Daemon behält zwischen den Fragen nichts.
+`ui/src/viewer/calibration.ts` ist die Logik (was zu fragen ist, was zu senden
+ist, was die Zahlen in Worten heißen — die Schwellen sind benannte Konstanten,
+und Tests halten sie), `calibrationpanel.tsx` das Formular.
+`crates/prismd/tests/ui_calibration.rs` schreibt die Antworten als Bytes für den
+Handdecoder (`ui/src/ipc/calibration.test.ts`), und `ui/e2e/calibration.spec.ts`
+spielt einen Bediener gegen einen echten Daemon: vier Marks, ein Kopf, der
+woanders hängt, als die Show sagt, die Pose gegen die Wahrheit gehalten,
+angewendet und mit einem Oops zurückgenommen.
+
 ---
 
 ## 3. Die Regeln, die aus Fehlern entstanden sind

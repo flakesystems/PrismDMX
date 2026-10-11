@@ -210,6 +210,8 @@ testet, überrascht wird.
 
 ## B70 — Kein Kalibrierungs-Workflow für die 3D-Position von Scheinwerfern
 
+**In der nächsten Version behoben.** *Calibrate* im Viewer 3D rechnet aus Marks, auf die Sie den Strahl richten, aus, wo ein Moving Head wirklich hängt (Bedienhandbuch, Kapitel 8).
+
 **Wo:** 3D-Viewer, Rig.
 **Schwere:** ärgerlich.
 

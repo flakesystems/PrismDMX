@@ -38,6 +38,7 @@ pub mod finite;
 mod ids;
 mod json;
 mod machine;
+mod mark;
 mod midi;
 mod output;
 mod patch;
@@ -78,13 +79,14 @@ pub use executor::{
 };
 pub use export::{BINDINGS_DIR, export_bindings};
 pub use ids::{
-    ExecutorId, FixtureId, GroupId, OutputId, PresetId, SequenceId, SessionId, UniverseId, ViewId,
-    WindowInstanceId,
+    ExecutorId, FixtureId, GroupId, MarkId, OutputId, PresetId, SequenceId, SessionId, UniverseId,
+    ViewId, WindowInstanceId,
 };
 pub use json::{JsonPatchOp, JsonValue};
 pub use machine::{
     ExitAction, LogLevel, MachineChange, MachineOverride, MachineSettings, ShowFileInfo,
 };
+pub use mark::{MAX_MARK_NAME, MAX_MARKS, Mark};
 pub use midi::{MidiPortInfo, SurfaceHealth, SurfaceStatus};
 pub use output::{
     ArtNetCounters, ArtNetNodeInfo, ArtNetPort, NodeHealth, NodeReach, OutputHealth,

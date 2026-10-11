@@ -24,6 +24,19 @@ Every version so far is a **pre-release**.
 
 ## Not yet released
 
+- **Calibrating a head (Viewer 3D):** the **Calibrate** button works out **where
+  a moving head really hangs**, and how it is turned, from where its beam really
+  lands (B70, GitHub #42). You enter **marks** — points of the room with a known
+  place: spike tape, the corner of a platform — let the desk drive the head at
+  each with **Aim**, trim pan and tilt until the beam is on the real mark, and
+  press **Take**. From three marks (two, if you already know the position) the
+  pose is there, with a traffic light for how far to trust it and which mark is
+  out; **Apply** hangs the head there — one Oops. Every further mark improves the
+  estimate the next **Aim** starts from. Marks belong to the **show** (a table of
+  their own in the `.prism` file, version 3; older files open with none), not to
+  the head. *Checked only against computed beams*, on no real head yet (manual,
+  chapter 8).
+
 - **Trackers (PSN):** a tracking system — openfollow.app, or anything that speaks
   PosiStageNet — can now move heads. *Settings → Trackers* switches the receiver
   on (group, port, interface, the axes, and how long before a tracker counts as

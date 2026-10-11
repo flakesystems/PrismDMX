@@ -54,8 +54,9 @@ fn the_session_commands_are_the_session_group() {
         // Sixty-**four** since S48's `SetCueTracking`, which is a **show**
         // command, and sixty-**five** since S29's `Shutdown`, which is a fourth
         // kind with no applier at all; sixty-**six** since S30's
-        // `PlaceFixtures`, which is a show command.
-        66
+        // `PlaceFixtures`, which is a show command; sixty-**seven** since B70's
+        // `EditMarks`, which is one too.
+        67
     );
 }
 

@@ -1204,6 +1204,27 @@ pub enum Command {
         /// Each fixture's place, whole.
         placements: Vec<crate::FixturePlace>,
     },
+    /// Adds, changes and removes stage marks - **B70**, the reference points a
+    /// head is calibrated against (`crate::Mark`).
+    ///
+    /// One command for the three because one gesture in the calibration window
+    /// is often more than one of them - move a mark and delete another - and
+    /// a gesture is one Oops. A mark in `set` whose number is already in the
+    /// pool replaces it; a number in `remove` that is not there is not an
+    /// error, since the point of the gesture is that it is gone. The removals
+    /// are made first, so a number in both comes back as the new mark.
+    ///
+    /// # Refused whole
+    ///
+    /// A mark that is not valid (`crate::Mark::is_valid`) or a pool that would
+    /// pass `crate::MAX_MARKS` refuses the command, and **none** of it is
+    /// applied. Marks move no channel: the engine is never told.
+    EditMarks {
+        /// The marks to put in the pool, whole.
+        set: Vec<crate::Mark>,
+        /// The numbers to take out of it.
+        remove: Vec<crate::MarkId>,
+    },
     /// Embed one of the desk's built-in profiles into the show.
     ///
     /// Carries the **key only**, for the same reason
@@ -2752,6 +2773,12 @@ mod tests {
             // the wrong truss is exactly what Oops is for.
             Command::PlaceFixtures {
                 placements: Vec::new(),
+            },
+            // B70's: the reference points of a calibration are the show's, and
+            // a mark moved to the wrong spike is what Oops is for.
+            Command::EditMarks {
+                set: Vec::new(),
+                remove: Vec::new(),
             },
             // S57's, which is one step however many fixtures it carries.
             Command::PatchFixtures {

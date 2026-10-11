@@ -296,6 +296,53 @@ A browser without WebGL — and every unit test — gets S30's 2D picture behind
 `viewer/surface.ts::ViewSurface`; the specification's §4.7 has the reasons for
 both.
 
+
+### Calibrating a head is a question, and the marks are the show's — B70
+
+Where a head really hangs is worked out from where its beam was seen to land.
+Three rules came out of it:
+
+- **The solver is pure and lives in `prism-domain`** (`calibration.rs`): sightings
+  in, a pose and its quality out. It is the viewer's yoke run backwards twice —
+  `beam(pan, tilt)` is `aim` inverted, and a pose is right when
+  `R · beam ∥ (mark − position)` for every sighting — solved by
+  Levenberg–Marquardt with an analytic Jacobian, from the place the show has and
+  from three quarter-turns of heading. What it **refuses** is as much of the
+  contract as what it answers: marks in a line, the same sighting twice, a
+  solution that settles on a mark or runs to the edge of the stage are
+  `Underdetermined`, never an answer that depends on the starting guess. The
+  tests are a property over arbitrary poses (a pose survives the round trip to
+  1e-3 m), the refusals, and a mistyped mark showing up as the one big
+  residual.
+- **Two questions, no command, one answer variant.** `Query::CalibrationSolve`
+  and `Query::CalibrationAim` change nothing; the pose is applied by an ordinary
+  `PlaceFixtures` (one Oops). Both are answered by `Answer::Calibration`, whose
+  payload is one boxed enum — **a second `Answer` variant overflowed
+  `wire.rs`'s value-tree budget by 64 bytes**, and a first one was over by 700
+  until its payload was boxed. `Query` lost `Eq` (it carries a `Vec3`).
+  Sightings are **programmer values**, not degrees: only the daemon knows the
+  profile's travel, an inverted channel and a mirrored axis, and
+  `prism_domain::AxisModel` is that reading, **shared with the follow layer** —
+  a head driven to a mark by the calibration and a head aimed at a tracker by
+  S32 cannot disagree about what a pan value is.
+- **Marks are a pool of the show**, `Show::marks` (`prism_domain::Mark`, `MarkId`),
+  edited by one `Command::EditMarks { set, remove }`: refused whole, one Oops,
+  `UndoScope::Mark`, no `Effect`. They are a seventh collection in the show
+  document (`/marks/N`, always present, `{}` when empty — a JSON-Patch `add`
+  needs its parent), a **table of their own in the `.prism` file**, and with it
+  `ShowStore::FORMAT_VERSION` is **3**: migration 3 only adds the table, so a
+  version-1 or version-2 file opens with none. `Show` reads a document without
+  `marks` as having none (`#[serde(default)]`).
+
+The window keeps the *sightings*; the daemon keeps nothing between questions.
+`ui/src/viewer/calibration.ts` is the logic (what to ask, what to send, what the
+numbers mean in words — the thresholds are named constants and tests hold them),
+`calibrationpanel.tsx` the form. `crates/prismd/tests/ui_calibration.rs` writes
+the answers as bytes for the hand decoder (`ui/src/ipc/calibration.test.ts`), and
+`ui/e2e/calibration.spec.ts` plays an operator against a real daemon: four marks,
+a head that hangs somewhere other than the show says, the pose compared with the
+truth, applied, and taken back in one Oops.
+
 ---
 
 ## 3. The rules that came out of mistakes

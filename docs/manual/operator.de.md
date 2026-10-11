@@ -246,6 +246,11 @@ von einem Master.
   (ein Oops) und bleibt erhalten, wenn Sie die Adresse korrigieren. Eine Auswahl,
   deren Köpfe sich unterscheiden, zeigt das Kästchen halb gefüllt; ein Klick darauf
   setzt es für jeden gewählten Kopf.
+- **Calibrate.** Der Knopf **Calibrate** neben den Ansichtsknöpfen tauscht das
+  Feld gegen das, das aus dem Ort, wo der Strahl wirklich landet, ausrechnet,
+  **wo ein Moving Head wirklich hängt** — siehe *Einen Kopf kalibrieren* in
+  Kapitel 8. **Place** tauscht zurück; jedes Feld behält, was Sie darin getippt
+  haben.
 - **Was die Zahlen bedeuten.** Meter, gemessen von einem Punkt, den Sie wählen —
   die Mitte der Bühnenvorderkante auf Bodenhöhe ist ein guter. **X** läuft quer
   über die Bühne (positiv ist Bühne links, also vom Publikum aus rechts), **Y**
@@ -789,6 +794,72 @@ dem man keinen Tracker gegeben hat, tut damit nichts.
   nicht, wo oben ist oder was eine Einheit ist, und ein Vorgabewert ist geraten.
   Prüfen Sie die Zuordnung vor einer Show an einem Darsteller und der Liste — das
   Installationshandbuch hat die Schritte.
+
+### Einen Kopf kalibrieren: wo er wirklich hängt
+
+Ein Tracker ist nur so gut wie der Ort, an dem sein Kopf hängt. Ein Kopf, dessen
+Position zwei Meter danebenliegt oder der zehn Grad anders gedreht ist, als die
+Show sagt, wird falsch gezeichnet und falsch auf den Darsteller gerichtet.
+*Calibrate* im *Viewer 3D* rechnet aus dem Ort, wo der Strahl wirklich landet,
+die echte Position und Drehung aus — was ein Rigger mit Maßband und Taschenlampe
+tut, mit dem Rechnen durch das Pult.
+
+**Marks.** Sagen Sie dem Pult zuerst, welche Punkte des Raums Sie mit einem
+Strahl treffen können und deren Ort Sie kennen: Spike-Tape auf dem Boden, die
+Ecke eines Podests, eine Klemme an der Traverse. Eine Mark hat einen
+wahlweisen Namen und einen Ort in Metern vom selben Nullpunkt wie das Rig —
+**X** quer über die Bühne, **Y** vom Boden nach oben (null für eine Mark auf dem
+Boden), **Z** nach hinten. **Marks gehören der Show**, nicht einem Kopf: einmal
+eingeben, und jeder Kopf wird gegen dieselben kalibriert. *Add mark*, *Edit* und
+*Delete* sind je ein Oops.
+
+**Sightings.** Wählen Sie **einen** Moving Head aus — mehrere werden abgelehnt,
+weil das Fahren eines Kopfes alles bewegt, was ausgewählt ist. Dann, für jede
+Mark:
+
+1. **Aim** fährt den Kopf auf die Mark, ausgehend von der besten Schätzung, wo er
+   hängt: zuerst der Ort, den die Show hat, danach das letzte Ergebnis. Der
+   Strahl landet nahe der Mark und selten genau darauf.
+2. Trimmen Sie **Pan** und **Tilt** — mit den Encodern, dem Jogwheel oder der
+   Zeile (`Fixture 5 Pan At 41.2`) —, bis der Strahl auf der echten Mark liegt.
+3. **Take** behält das Pan und Tilt, das der Programmer jetzt hält, als Sighting
+   dieser Mark. Dieselbe Mark noch einmal zu nehmen ersetzt es; **Forget**
+   verwirft es.
+
+**Wie viele.** Drei Sightings finden Position und Drehung. **Zwei** genügen,
+wenn Sie die Position schon *kennen* — **Position is known** anhaken (aus der
+Planung oder vom Maßband) — und nur die Drehung wollen. Drei sind aber genau
+genug, und dann bleibt ein Fehler bei einer Mark unbemerkt: **nehmen Sie eine
+vierte**, legen Sie die Marks weit auseinander und **nicht alle auf eine Linie**,
+und wenn möglich in verschiedenen Höhen. Das Pult lehnt Sightings ab, die die
+Antwort nicht entscheiden können, statt zu raten.
+
+**Das Ergebnis** erscheint unter den Marks, sobald es genug Sightings gibt: wo
+der Kopf hängt, wie er gedreht ist, und was davon zu halten ist.
+
+- **Grün** — die Sightings stimmen auf ein halbes Grad überein und die Position
+  ist auf etwa dreißig Zentimeter oder besser genau.
+- **Gelb** — brauchbar, nicht exakt: die Sightings stimmen nur ungefähr überein;
+  oder es blieb nichts übrig, womit man sie prüfen könnte (*eine weitere
+  nehmen*); oder die Position ist unsicher (*Marks weiter auseinander oder in
+  verschiedenen Höhen nehmen, oder eine gemessene Position festhalten*).
+- **Rot** — die Sightings weichen im Mittel um mehr als anderthalb Grad
+  voneinander ab. Das Feld nennt die Mark, die am weitesten danebenliegt: ihr Ort
+  stimmt nicht, oder der Strahl lag nicht darauf. Prüfen Sie sie, oder
+  **Forget** und noch einmal nehmen. Die Zahl neben jedem Sighting sagt, um wie
+  viele Grad dieses danebenliegt.
+
+**Apply** hängt den Kopf dorthin, wo die Sightings ihn sehen — Position und
+Drehung in **einem** Schritt; sein Tracker und seine Kästchen *Läuft andersherum*
+bleiben, wie sie waren — und **Oops** nimmt es zurück. **Start over** verwirft
+alle Sightings. Sightings gehören dem Fenster, nicht der Show: sie werden nicht
+gespeichert, und einen anderen Kopf auszuwählen fängt neu an.
+
+**Gut zu wissen.** Pan und Tilt werden über dieselben Achsen gelesen, über die
+ein Tracker angezielt wird; ein Kopf mit *Läuft andersherum* wird also genau so
+kalibriert, wie er gerichtet wird. Das Pult bewegt keinen Kopf von selbst,
+schaut die Bühne nicht mit einer Kamera an und zeichnet die Marks noch nicht im
+3D-Bild.
 
 ---
 

@@ -112,6 +112,8 @@ pub enum UndoScope {
     Preset(PresetId),
     /// One group (S40).
     Group(GroupId),
+    /// One stage mark - B70.
+    Mark(prism_domain::MarkId),
     /// One executor slot.
     Executor(ExecutorId),
     /// The programmer, whole.
@@ -176,6 +178,8 @@ pub(crate) enum Image {
     /// waiting for since S11 and gave the pool `Delete`, `Copy`, `Move` and
     /// `Label` beside it.
     Group(GroupId, Option<Group>),
+    /// One stage mark - B70. `None`: the show had no such mark.
+    Mark(prism_domain::MarkId, Option<prism_domain::Mark>),
     /// One executor slot. `None`: the slot was empty.
     Executor(ExecutorId, Option<Executor>),
     /// The whole programmer state, Clear stage included.
@@ -222,6 +226,7 @@ impl Image {
             Self::Sequence(id, _) => UndoScope::Sequence(*id),
             Self::Preset(id, _) => UndoScope::Preset(*id),
             Self::Group(id, _) => UndoScope::Group(*id),
+            Self::Mark(id, _) => UndoScope::Mark(*id),
             Self::Executor(id, _) => UndoScope::Executor(*id),
             Self::Programmer(_) => UndoScope::Programmer,
             Self::ProgrammerPage { .. } => UndoScope::ProgrammerPage,

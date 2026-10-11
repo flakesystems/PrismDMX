@@ -417,6 +417,7 @@ impl SessionState {
             | Command::UnpatchFixture { .. }
             | Command::RenumberFixture { .. }
             | Command::PlaceFixtures { .. }
+            | Command::EditMarks { .. }
             | Command::EmbedFixtureType { .. }
             | Command::Oops
             | Command::Redo

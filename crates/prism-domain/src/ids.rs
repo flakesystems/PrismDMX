@@ -72,6 +72,10 @@ id_newtype!(
     GroupId
 );
 id_newtype!(
+    /// Stage mark number - **B70**, a reference point for calibrating a head.
+    MarkId
+);
+id_newtype!(
     /// Sequence (cue list) number.
     SequenceId
 );

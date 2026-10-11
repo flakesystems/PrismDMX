@@ -815,7 +815,7 @@ fn a_process_killed_mid_write_leaves_the_last_committed_state() {
 // -- migration ------------------------------------------------------------
 
 #[test]
-fn a_version_one_file_migrates_to_version_two() {
+fn a_version_one_file_migrates_to_the_current_version() {
     // The fixture is checked in and frozen: a migration tested against a file
     // the current code wrote is a migration tested against itself. It is
     // copied first, because opening it is what migrates it and the file in the
@@ -832,7 +832,7 @@ fn a_version_one_file_migrates_to_version_two() {
 
     let store = ShowStore::open(&path).unwrap();
     assert_eq!(store.version(), ShowStore::FORMAT_VERSION);
-    assert_eq!(ShowStore::FORMAT_VERSION, 2);
+    assert_eq!(ShowStore::FORMAT_VERSION, 3);
 
     let mut file = ShowFile::new();
     store.load(&mut file).unwrap();
@@ -863,10 +863,10 @@ fn a_version_one_file_migrates_to_version_two() {
     assert_eq!(file.session, prism_core::SessionState::new());
     assert!(!file.is_dirty());
 
-    // It is a version-2 file now, and stays one.
+    // It is a current-version file now, and stays one.
     drop(store);
     let store = ShowStore::open(&path).unwrap();
-    assert_eq!(store.version(), 2);
+    assert_eq!(store.version(), ShowStore::FORMAT_VERSION);
     assert_eq!(
         std::fs::read(&original).unwrap(),
         before,
@@ -1080,4 +1080,55 @@ fn what_is_written_is_what_a_client_would_have_mirrored() {
     store.load(&mut reopened).unwrap();
 
     assert_eq!(reopened.show.to_json().unwrap(), mirror.into_value());
+}
+
+/// B70's: a version-2 file - a show with its session and no stage marks - opens
+/// at version 3 with none, and a mark saved into it comes back exactly.
+#[test]
+fn a_version_two_file_gains_the_mark_table_and_keeps_what_it_had() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("two.prism");
+    {
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        connection
+            .pragma_update(None, "application_id", ShowStore::APPLICATION_ID)
+            .unwrap();
+        connection
+            .execute_batch(&format!(
+                "BEGIN; {} {} PRAGMA user_version = 2; COMMIT;",
+                prism_core::MIGRATIONS[0],
+                prism_core::MIGRATIONS[1]
+            ))
+            .unwrap();
+    }
+    let mut store = ShowStore::open(&path).unwrap();
+    assert_eq!(store.version(), 3);
+    let mut file = ShowFile::new();
+    store.load(&mut file).unwrap();
+    assert_eq!(file.show.stage_marks().count(), 0);
+
+    let mark = prism_domain::Mark {
+        id: prism_domain::MarkId::new(4),
+        name: "DS centre".to_owned(),
+        position: Vec3 {
+            x: 0.1,
+            y: 0.0,
+            z: -3.3,
+        },
+    };
+    file.show
+        .edit_marks(std::slice::from_ref(&mark), &[])
+        .unwrap();
+    store.save(&mut file).unwrap();
+
+    let again = ShowStore::open(&path).unwrap().read().unwrap();
+    assert_eq!(
+        again.show.stage_marks().cloned().collect::<Vec<_>>(),
+        [mark]
+    );
+    // And the exact bytes: a mark's place is a float and the file is exact.
+    assert_eq!(
+        rmp_serde::to_vec_named(&again.show).unwrap(),
+        rmp_serde::to_vec_named(&file.show).unwrap()
+    );
 }
