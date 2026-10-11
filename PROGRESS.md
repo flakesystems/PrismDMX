@@ -5667,7 +5667,7 @@ explicitly not in.
 
 #### What was not done, on purpose
 
-- **The marks are not drawn in the 3D picture.** Both renderers (the WebGL stage and the 2D fallback) would need a symbol and a label; the panel lists them with their places. A follow-up.
+- **Marks drawn in the 3D picture** were not in the first push; they followed it (see *Carried out of B70*).
 - **No camera, no automatic aiming**, as decided.
 - **No console word for a mark**; like placing, it is a gesture.
 - **Sightings are not saved**: a reload forgets a half-finished calibration (the marks stay).
@@ -5679,8 +5679,9 @@ explicitly not in.
 | `cargo test --workspace` | ✅ **2 772 passed**, 0 failed, 25 ignored (2 717 / 23 before) |
 | `cargo clippy --workspace --all-targets -- -D warnings` · `cargo fmt --all --check` · `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` | ✅ all three |
 | `ui`: `npx tsc -b --force`, `npm run lint`, `npm run build` | ✅ (lint: only the existing `no-useless-escape` warnings) |
-| `ui`: `npm run test` | ✅ **1 143 passed** in 86 files (1 076 / 82 before) |
-| `ui`: Playwright | ✅ **60 passed** in 4.8 min (59 before; `e2e/calibration.spec.ts` is the new one) |
+| `ui`: `npm run test` | ✅ **1 156 passed** in 87 files (1 076 / 82 before; 1 143 at the first push, the rest are the marks in the picture and the floor click) |
+| `ui`: Playwright | ✅ **60 passed** in 4.7 min (59 before; `e2e/calibration.spec.ts` is the new one) |
+| **CI** | ✅ the first push (`c9fd2f7`) ran `ci.yml` run **38166229477** green on **all seven jobs**; the marks-in-the-picture commit is watched the same way |
 
 ## 3. Coverage tracking
 
@@ -6897,10 +6898,16 @@ Carried out of S32:
 
 Carried out of B70:
 
-- **The marks are not drawn in the 3D picture.** Both renderers need a symbol and
-  a label (the WebGL stage in `gl/`, the 2D fallback in `scene.ts`); the panel
-  lists them with their places. Seeing a mark where the head thinks it is would be
-  the quickest check of a result.
+- **The marks are drawn in the 3D picture** (added the same day, after the push
+  that CI passed): `gl/marks.ts` for the WebGL stage (thin boxes, not lines - a
+  line is one pixel wide - and a sprite for the name, none of it tone-mapped) and
+  `Scene.#marks` for the 2D fallback; *Frame all* includes them. Tests: 3 in
+  `scene.test.ts`, 1 in `driver.test.ts`, 4 in `gl/marks.test.ts`, and the e2e
+  counts more amber pixels after the marks than before (the selection's outline
+  is amber too, so the baseline is taken first). **The inverse gesture exists
+  too**: with the panel open, a click on the floor fills the new-mark form
+  (`floorPoint` in `camera.ts`, the way back from `project`; a round-trip test
+  from every view, 3 panel tests, and a step in the e2e); it sends nothing.
 - **Sightings are not saved.** A reload forgets a half-finished calibration; the
   marks stay. Keeping them would make them show data or machine data, and a
   second client could then extend one - the reason the daemon holds none.

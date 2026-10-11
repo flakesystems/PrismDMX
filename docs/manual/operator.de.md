@@ -811,7 +811,10 @@ wahlweisen Namen und einen Ort in Metern vom selben Nullpunkt wie das Rig —
 **X** quer über die Bühne, **Y** vom Boden nach oben (null für eine Mark auf dem
 Boden), **Z** nach hinten. **Marks gehören der Show**, nicht einem Kopf: einmal
 eingeben, und jeder Kopf wird gegen dieselben kalibriert. *Add mark*, *Edit* und
-*Delete* sind je ein Oops.
+*Delete* sind je ein Oops. Bei geöffnetem Calibrate-Feld füllt ein Klick auf den
+**Boden** im Bild das Formular mit diesem Ort (Höhe null) — ein schneller Weg,
+eine Mark dorthin zu legen, wo man sie sieht; Name und Höhe lassen sich vor
+*Add mark* noch ändern.
 
 **Sightings.** Wählen Sie **einen** Moving Head aus — mehrere werden abgelehnt,
 weil das Fahren eines Kopfes alles bewegt, was ausgewählt ist. Dann, für jede
@@ -857,9 +860,11 @@ gespeichert, und einen anderen Kopf auszuwählen fängt neu an.
 
 **Gut zu wissen.** Pan und Tilt werden über dieselben Achsen gelesen, über die
 ein Tracker angezielt wird; ein Kopf mit *Läuft andersherum* wird also genau so
-kalibriert, wie er gerichtet wird. Das Pult bewegt keinen Kopf von selbst,
-schaut die Bühne nicht mit einer Kamera an und zeichnet die Marks noch nicht im
-3D-Bild.
+kalibriert, wie er gerichtet wird. Das Pult bewegt keinen Kopf von selbst
+und schaut die Bühne nicht mit einer Kamera an. Die Marks sind im 3D-Bild
+gezeichnet — ein gelbes Kreuz an der Stelle, ein Strich zum Boden bei einer Mark
+darüber, dazu ihr Name —, und **Frame all** tritt weit genug zurück, dass sie mit
+ins Bild kommen; der Strahl eines kalibrierten Kopfes landet auf seinem Kreuz.
 
 ---
 

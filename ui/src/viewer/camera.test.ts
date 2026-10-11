@@ -12,6 +12,7 @@ import {
   clipToNear,
   depthOf,
   eyeOf,
+  floorPoint,
   frameAll,
   lensOf,
   look,
@@ -100,5 +101,38 @@ describe("a camera", () => {
       expect(out[1]).toBeGreaterThanOrEqual(0);
       expect(out[1]).toBeLessThanOrEqual(600);
     }
+  });
+});
+
+describe("the floor under a point of the picture (B70)", () => {
+  it("is the way back from project for a point on the floor, from every view", () => {
+    for (const view of ["front", "top", "side", "perspective"] as const) {
+      const camera = newCamera();
+      camera.target = v3(0, 0, 0);
+      camera.distance = 15;
+      look(camera, view);
+      const lens = lensOf(camera, 800, 500);
+      for (const place of [v3(0, 0, 0), v3(3.25, 0, -2), v3(-4, 0, 5.5)]) {
+        const out = [0, 0];
+        if (!project(lens, place, out)) {
+          continue;
+        }
+        const back = floorPoint(lens, out[0] ?? 0, out[1] ?? 0);
+        expect(back, `${view} ${JSON.stringify(place)}`).not.toBeNull();
+        expect(back?.x).toBeCloseTo(place.x, 6);
+        expect(back?.y).toBe(0);
+        expect(back?.z).toBeCloseTo(place.z, 6);
+      }
+    }
+  });
+
+  it("is nothing above the horizon, and nothing for a camera under the floor", () => {
+    const camera = newCamera();
+    look(camera, "front");
+    const lens = lensOf(camera, 800, 500);
+    // The top edge of a view that looks nearly level is sky.
+    expect(floorPoint(lens, 400, 0)).toBeNull();
+    const under = { ...lens, eye: v3(0, -2, 0) };
+    expect(floorPoint(under, 400, 400)).toBeNull();
   });
 });

@@ -79,6 +79,36 @@ function panTiltFor(mark: V3): { pan: number; tilt: number } {
   return { pan, tilt };
 }
 
+/**
+ * How many pixels of the viewer are amber, read back out of what the browser
+ * shows (see viewer.spec.ts for the method): the colour of a mark, and nothing
+ * else in this rig is that colour.
+ */
+async function amberPixels(page: Page): Promise<number> {
+  const png = (await page.getByTestId("viewer-canvas").screenshot()).toString("base64");
+  return page.evaluate(async (data) => {
+    const blob = await (await fetch(`data:image/png;base64,${data}`)).blob();
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d");
+    if (context === null) {
+      return -1;
+    }
+    context.drawImage(bitmap, 0, 0);
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    let bright = 0;
+    for (let at = 0; at < image.data.length; at += 4) {
+      const [r, g, b] = [image.data[at] ?? 0, image.data[at + 1] ?? 0, image.data[at + 2] ?? 0];
+      if (r > 120 && g > 60 && r > g + 25 && g > b + 25) {
+        bright += 1;
+      }
+    }
+    return bright;
+  }, png);
+}
+
 /** A pan of the test head (+-270 degrees) or a tilt (+-135) as the percentage a line takes. */
 const panPercent = (degrees: number): string => (((degrees + 270) / 540) * 100).toFixed(4);
 const tiltPercent = (degrees: number): string => (((degrees + 135) / 270) * 100).toFixed(4);
@@ -129,7 +159,19 @@ test("a head is calibrated from four marks, hung where it really is, and taken b
   await page.getByTestId("viewer-panel-calibrate").click();
   await expect(page.getByTestId("calibration-target")).toContainText("Fixture 10");
 
-  // The marks are the show's: entered once, whatever head is calibrated.
+  // The marks are the show's: entered once, whatever head is calibrated. What
+  // is amber in the picture before them is the selection's outline.
+  await page.getByTestId("viewer-frame").click();
+  const amberBefore = await amberPixels(page);
+  // A click on the floor of the picture proposes a place for a mark: it fills
+  // the form, with the height at nought, and sends nothing.
+  const canvas = page.getByTestId("viewer-canvas");
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.click((box?.x ?? 0) + (box?.width ?? 0) / 2, (box?.y ?? 0) + (box?.height ?? 0) * 0.85);
+  await expect(page.getByTestId("calibration-field-y")).toHaveValue("0");
+  expect(Number(await page.getByTestId("calibration-field-x").inputValue())).not.toBeNaN();
+
   for (const mark of MARKS) {
     await page.getByTestId("calibration-field-name").fill(mark.name);
     await page.getByTestId("calibration-field-x").fill(String(mark.at.x));
@@ -138,6 +180,10 @@ test("a head is calibrated from four marks, hung where it really is, and taken b
     await page.getByTestId("calibration-save-mark").click();
   }
   await expect(page.getByTestId("calibration-marks").locator("li")).toHaveCount(4);
+
+  // And they are in the picture, framed with the rig: more amber than before.
+  await page.getByTestId("viewer-frame").click();
+  await expect.poll(() => amberPixels(page), { timeout: 10_000 }).toBeGreaterThan(amberBefore);
 
   // The first mark: the desk drives the head at it from where the plan hangs
   // it. The programmer then holds a pan and a tilt - the thing "Take" reads.

@@ -50,18 +50,28 @@ import {
 } from "./marks";
 import type { RigFixture } from "./rig";
 
+/** A place on the floor the operator clicked in the picture; `n` says which click. */
+export interface FloorSpot {
+  readonly x: number;
+  readonly z: number;
+  readonly n: number;
+}
+
 /** The panel. */
 export function CalibrationPanel({
   rig,
   marks,
   programmer,
   selection,
+  spot,
   visible,
 }: {
   readonly rig: readonly RigFixture[];
   readonly marks: readonly Mark[];
   readonly programmer: ProgrammerState | null;
   readonly selection: readonly number[];
+  /** A click on the floor of the picture: where the next mark would go. */
+  readonly spot: FloorSpot | null;
   readonly visible: boolean;
 }) {
   const send = useSend();
@@ -145,6 +155,14 @@ export function CalibrationPanel({
   // The mark form: a new mark, or the one being edited.
   const [editing, setEditing] = useState<number | null>(null);
   const [fields, setFields] = useState<MarkFields>(BLANK_MARK);
+  // A click on the floor fills the place of a **new** mark, height nought, and
+  // leaves the name alone. Taken while rendering, as the reset above is.
+  const [seenSpot, setSeenSpot] = useState<number>(spot?.n ?? 0);
+  if (spot !== null && spot.n !== seenSpot) {
+    setSeenSpot(spot.n);
+    setEditing(null);
+    setFields({ ...fields, x: String(spot.x), y: "0", z: String(spot.z) });
+  }
   const formId = editing ?? nextMarkId(marks);
   const formMark = markOfFields(formId, fields);
   const field = (key: keyof MarkFields, label: string, title: string) => (

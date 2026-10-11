@@ -33,6 +33,8 @@ import { clipToNear, depthOf, lensOf, project } from "./camera";
 import type { Look } from "./look";
 import { LIT, darkLook, readLook } from "./look";
 import type { RigFixture } from "./rig";
+import type { Mark } from "../bindings";
+import { markLabel } from "./marks";
 import type { V3 } from "./space";
 import { add, around, dot, multiply, normalize, scale, sub, turn, v3, yoke } from "./space";
 import type { ViewSurface } from "./surface";
@@ -47,7 +49,12 @@ export const INK = {
   selected: "#ffd479",
   lens: "#1b222c",
   label: "#8b98a8",
+  /** A stage mark (B70): amber, like the selection, because both are *this one*. */
+  mark: "#e0a030",
 } as const;
+
+/** How far a mark's cross reaches from its centre, in metres. */
+export const MARK_ARM = 0.25;
 
 /** How many rays a beam's cone is drawn with. */
 const RAYS = 16;
@@ -123,11 +130,13 @@ export class Scene {
     camera: Camera,
     selection: ReadonlySet<number>,
     pixelScale = 1,
+    marks: readonly Mark[] = [],
   ): SceneStats {
     const stats = noStats();
     const lens = lensOf(camera, surface.width, surface.height);
     surface.clear(INK.background);
     this.#floor(surface, lens, rig, pixelScale);
+    this.#marks(surface, lens, marks, pixelScale);
 
     while (this.#looks.length < rig.length) {
       this.#looks.push(darkLook());
@@ -249,6 +258,26 @@ export class Scene {
     }
     for (let z = minZ; z <= maxZ; z += step) {
       this.#segment(surface, lens, v3(minX, 0, z), v3(maxX, 0, z), z === 0 ? INK.axis : INK.grid, width);
+    }
+  }
+
+  /**
+   * The stage marks (B70): a cross on the spot, a stem up from it when it is
+   * above the floor, and its name. Under the beams and the bodies, so a mark
+   * is never in front of the thing that hides it.
+   */
+  #marks(surface: ViewSurface, lens: Lens, marks: readonly Mark[], pixelScale: number): void {
+    const width = Math.max(1, pixelScale) * 1.5;
+    for (const mark of marks) {
+      const at = mark.position;
+      this.#segment(surface, lens, v3(at.x - MARK_ARM, at.y, at.z), v3(at.x + MARK_ARM, at.y, at.z), INK.mark, width);
+      this.#segment(surface, lens, v3(at.x, at.y, at.z - MARK_ARM), v3(at.x, at.y, at.z + MARK_ARM), INK.mark, width);
+      if (at.y > 0.01) {
+        this.#segment(surface, lens, v3(at.x, 0, at.z), at, INK.mark, Math.max(1, pixelScale));
+      }
+      if (project(lens, v3(at.x, at.y + 0.12, at.z), this.#screen, 0)) {
+        surface.label(markLabel(mark), this.#screen[0] ?? 0, this.#screen[1] ?? 0, INK.mark, Math.round(11 * pixelScale));
+      }
     }
   }
 

@@ -40,6 +40,7 @@ class FakeStage {
   }
   setRig(): void {}
   setSelection(): void {}
+  setMarks(): void {}
   draw(_view: unknown, _camera: unknown, _seconds: number, haze: number, render = true): SceneStats {
     if (render) {
       this.draws += 1;

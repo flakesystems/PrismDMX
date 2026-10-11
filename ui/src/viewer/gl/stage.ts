@@ -49,6 +49,7 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 
 import type { TelemetryFrameView } from "../../telemetry/frame";
+import type { Mark } from "../../bindings";
 import type { Camera as Orbit } from "../camera";
 import { eyeOf } from "../camera";
 import type { ResourceCache } from "../resources";
@@ -67,6 +68,7 @@ import type { Projector } from "./floor";
 import { Floor } from "./floor";
 import { graphics } from "./graphics";
 import type { Picture, Pictures } from "./mask";
+import { MarkLayer } from "./marks";
 
 /** A size a stage gave its renderer: CSS pixels and device pixels per one. */
 export interface AppliedSize {
@@ -100,6 +102,7 @@ export class Stage {
   #rig: readonly RigFixture[] = [];
   #cone: BufferGeometry;
   #floorMesh: Floor;
+  #marks = new MarkLayer();
   #composer: EffectComposer | null = null;
   #models: ModelSource | null;
   #pictures = new Map<string, Picture | "loading" | "none">();
@@ -130,6 +133,7 @@ export class Stage {
     const grid = new GridHelper(40, 40, 0x3a4250, 0x1c2129);
     grid.position.y = 0.002;
     this.scene.add(grid);
+    this.scene.add(this.#marks.group);
     // Enough light to see the rig by, and no more: the stage is dark until
     // the fixtures light it.
     this.scene.add(new HemisphereLight(0x9aa8c0, 0x1a1c22, 1.1));
@@ -255,6 +259,11 @@ export class Stage {
       }
     }
     this.#rig = rig;
+  }
+
+  /** Draws the show's stage marks (B70); a no-op while they are the ones drawn. */
+  setMarks(marks: readonly Mark[]): void {
+    this.#marks.set(marks);
   }
 
   setSelection(selection: ReadonlySet<number>): void {

@@ -18,6 +18,7 @@
  *   budgets with both open on the widest rig this desk carries.
  */
 
+import type { Mark } from "../bindings";
 import type { TelemetrySink } from "../ipc/telemetry";
 import type { Scheduler } from "../telemetry/driver";
 import { animationFrames } from "../telemetry/driver";
@@ -27,6 +28,9 @@ import type { RigFixture } from "./rig";
 import type { SceneStats } from "./scene";
 import { Scene, noStats } from "./scene";
 import type { ViewSurface } from "./surface";
+
+/** No marks, as one array, so "no marks" is never a change. */
+const NO_MARKS: readonly Mark[] = [];
 
 /** How often the readout line is rewritten. */
 export const READOUT_EVERY_MS = 250;
@@ -73,6 +77,8 @@ export interface ViewerDriverOptions {
   readonly rig: () => readonly RigFixture[];
   /** The selection, read each frame. */
   readonly selection: () => ReadonlySet<number>;
+  /** The show's stage marks (B70), read each frame; none where absent. */
+  readonly marks?: () => readonly Mark[];
   /** The camera, mutated by the pointer and read here. */
   readonly camera: Camera;
   /** Device pixels per CSS pixel. */
@@ -127,6 +133,7 @@ export function driveViewer(options: ViewerDriverOptions): ViewerDriver {
   let forced = true;
   let drawnPayload: Uint8Array | null = null;
   let drawnRig: readonly RigFixture[] | null = null;
+  let drawnMarks: readonly Mark[] | null = null;
   let drawnSelection: ReadonlySet<number> | null = null;
   let drawnCamera = -1;
   let last: SceneStats = noStats();
@@ -160,10 +167,12 @@ export function driveViewer(options: ViewerDriverOptions): ViewerDriver {
     const payload = sink?.latest ?? null;
     const rig = options.rig();
     const selection = options.selection();
+    const marks = options.marks?.() ?? NO_MARKS;
     if (
       !forced &&
       payload === drawnPayload &&
       rig === drawnRig &&
+      marks === drawnMarks &&
       selection === drawnSelection &&
       camera.version === drawnCamera
     ) {
@@ -173,6 +182,7 @@ export function driveViewer(options: ViewerDriverOptions): ViewerDriver {
     const countsBefore = `${String(last.fixtures)}/${String(last.lit)}/${String(last.unplaced)}/${String(last.absent)}`;
     forced = false;
     drawnRig = rig;
+    drawnMarks = marks;
     drawnSelection = selection;
     drawnCamera = camera.version;
     if (payload !== drawnPayload) {
@@ -190,7 +200,7 @@ export function driveViewer(options: ViewerDriverOptions): ViewerDriver {
     }
 
     const started = clock();
-    last = scene.draw(surface, rig, view.hasFrame ? view : null, camera, selection, scale());
+    last = scene.draw(surface, rig, view.hasFrame ? view : null, camera, selection, scale(), marks);
     times[next] = clock() - started;
     next = (next + 1) % KEPT;
     kept = Math.min(KEPT, kept + 1);

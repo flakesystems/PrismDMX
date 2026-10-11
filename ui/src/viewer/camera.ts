@@ -140,6 +140,26 @@ export function project(lens: Lens, point: V3, out: Float64Array | number[], off
 }
 
 /**
+ * Where the floor is under a point of the surface - the way back from
+ * {@link project} for a point known to be at height nought, which is how a click
+ * becomes a place (a stage mark, B70). `null` for a point at or above the
+ * horizon, and for one the floor reaches only behind the camera.
+ */
+export function floorPoint(lens: Lens, x: number, y: number): V3 | null {
+  const toRight = (x - lens.cx) / lens.focal;
+  const toUp = -(y - lens.cy) / lens.focal;
+  const direction = add(add(lens.forward, scale(lens.right, toRight)), scale(lens.up, toUp));
+  if (direction.y >= -1e-9) {
+    return null;
+  }
+  const reach = -lens.eye.y / direction.y;
+  if (!(reach > 0)) {
+    return null;
+  }
+  return v3(lens.eye.x + direction.x * reach, 0, lens.eye.z + direction.z * reach);
+}
+
+/**
  * The point where the segment from `a` to `b` crosses the near plane, for a
  * segment with one end behind the camera.
  */

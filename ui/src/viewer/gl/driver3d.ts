@@ -46,6 +46,7 @@ import { animationFrames } from "../../telemetry/driver";
 import { TelemetryFrameView } from "../../telemetry/frame";
 import type { Camera } from "../camera";
 import type { ViewerDriver, ViewerReadout } from "../driver";
+import type { Mark } from "../../bindings";
 import type { RigFixture } from "../rig";
 import type { SceneStats } from "../scene";
 import { noStats } from "../scene";
@@ -59,6 +60,9 @@ const KEPT = 120;
 
 /** How much longer than its own cost the loop rests after an expensive frame. */
 const REST = 2;
+
+/** No marks, as one array, so "no marks" is never a change. */
+const NO_MARKS: readonly Mark[] = [];
 
 /** The longest rest, so a very slow machine still shows the rig moving. */
 const MAX_REST_MS = 2000;
@@ -78,6 +82,8 @@ export interface StageDriverOptions {
   readonly sink: TelemetrySink | null;
   readonly stage: Stage;
   readonly rig: () => readonly RigFixture[];
+  /** The show's stage marks (B70), read each frame; none where absent. */
+  readonly marks?: () => readonly Mark[];
   readonly selection: () => ReadonlySet<number>;
   readonly camera: Camera;
   readonly haze: () => number;
@@ -157,6 +163,7 @@ export function driveStage(options: StageDriverOptions): ViewerDriver {
   let drawnBytes = new Uint8Array(0);
   let drawnLength = -1;
   let drawnRig: readonly RigFixture[] | null = null;
+  let drawnMarks: readonly Mark[] | null = null;
   let drawnSelection: ReadonlySet<number> | null = null;
   let drawnCamera = -1;
   let drawnHaze = -1;
@@ -215,6 +222,7 @@ export function driveStage(options: StageDriverOptions): ViewerDriver {
     drewLastTick = false;
     const rig = options.rig();
     const selection = options.selection();
+    const marks = options.marks?.() ?? NO_MARKS;
     const haze = options.haze();
     const payload = sink?.latest ?? null;
     const box = options.size();
@@ -229,6 +237,9 @@ export function driveStage(options: StageDriverOptions): ViewerDriver {
     if (rig !== drawnRig) {
       stage.setRig(rig);
     }
+    if (marks !== drawnMarks) {
+      stage.setMarks(marks);
+    }
     if (selection !== drawnSelection) {
       stage.setSelection(selection);
     }
@@ -239,6 +250,7 @@ export function driveStage(options: StageDriverOptions): ViewerDriver {
       forced ||
       payload !== drawnPayload ||
       rig !== drawnRig ||
+      marks !== drawnMarks ||
       selection !== drawnSelection ||
       camera.version !== drawnCamera ||
       haze !== drawnHaze ||
@@ -266,6 +278,7 @@ export function driveStage(options: StageDriverOptions): ViewerDriver {
     const before = `${String(last.fixtures)}/${String(last.lit)}/${String(last.unplaced)}/${String(last.absent)}`;
     forced = false;
     drawnRig = rig;
+    drawnMarks = marks;
     drawnSelection = selection;
     drawnCamera = camera.version;
     drawnHaze = haze;

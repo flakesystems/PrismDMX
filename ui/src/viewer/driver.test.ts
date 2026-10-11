@@ -173,3 +173,33 @@ describe("the readout line", () => {
     expect(readoutText({ ...base, fixtures: 0 })).toBe("nothing is patched");
   });
 });
+
+describe("the stage marks (B70)", () => {
+  it("repaint when the marks change and not when they are the same marks", () => {
+    const frames = manualFrames();
+    let marks: readonly { id: number; name: string; position: { x: number; y: number; z: number } }[] = [];
+    let tick = 0;
+    const selection: ReadonlySet<number> = new Set();
+    const driver = driveViewer({
+      sink: new TelemetrySink(),
+      surface: new RecordingView(),
+      rig: () => rig,
+      marks: () => marks,
+      selection: () => selection,
+      camera: newCamera(),
+      scheduler: frames.scheduler,
+      clock: () => {
+        tick += 1;
+        return tick;
+      },
+    });
+    frames.step(0);
+    frames.step(16);
+    expect(driver.painted()).toBe(1);
+    marks = [{ id: 1, name: "A", position: { x: 0, y: 0, z: 0 } }];
+    frames.step(32);
+    expect(driver.painted()).toBe(2);
+    frames.step(48);
+    expect(driver.painted()).toBe(2);
+  });
+});

@@ -773,7 +773,10 @@ a cleat on the truss. A mark has an optional name and a place in metres from the
 same origin as the rig — **X** across the stage, **Y** up from the floor (nought
 for a mark on the floor), **Z** upstage. **Marks belong to the show**, not to
 one head: enter them once and every head is calibrated against the same ones.
-*Add mark*, *Edit* and *Delete* are one Oops each.
+*Add mark*, *Edit* and *Delete* are one Oops each. With the Calibrate panel open,
+a click on the **floor** of the picture fills the form with that place (height
+nought) — a quick way to put a mark where you can see it; the name and the
+height you can still change before *Add mark*.
 
 **Sightings.** Select **one** moving head — several are refused, because driving
 a head moves everything that is selected. Then, for each mark:
@@ -816,8 +819,10 @@ and selecting a different head starts again.
 
 **Good to know.** Pan and tilt are read through the same axes a tracker is aimed
 through, so a head set to *Runs the other way* is calibrated exactly as it is
-aimed. The desk does not move a head by itself, does not look at the stage with a
-camera, and does not draw the marks in the 3D picture yet.
+aimed. The desk does not move a head by itself and does not look at the stage with a
+camera. The marks are drawn in the 3D picture — an amber cross on the spot, a
+stem down to the floor for one above it, and its name — and **Frame all** stands
+back far enough for them too; a calibrated head's beam lands on its cross.
 
 ---
 

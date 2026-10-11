@@ -30,7 +30,7 @@ import { useAsk, useSend } from "../store/hooks";
 import { useTelemetryChannel } from "../telemetry/context";
 import { devicePixelRatio, resizeCanvas } from "../telemetry/painter";
 import type { Camera, ViewName } from "./camera";
-import { frameAll, look, newCamera, orbit, slide, zoom } from "./camera";
+import { floorPoint, frameAll, lensOf, look, newCamera, orbit, slide, zoom } from "./camera";
 import type { ViewerDriver, ViewerReadout } from "./driver";
 import { driveViewer, readoutText } from "./driver";
 import type { DetailLevel } from "./gl/detail";
@@ -48,6 +48,7 @@ import {
 import { SOFTWARE_FRAME_MS, driveStage } from "./gl/driver3d";
 import { graphics } from "./gl/graphics";
 import { Stage, webglAvailable } from "./gl/stage";
+import type { FloorSpot } from "./calibrationpanel";
 import { CalibrationPanel } from "./calibrationpanel";
 import { marksOf } from "./marks";
 import { ResourceCache } from "./resources";
@@ -97,8 +98,11 @@ export function Viewer3D({
   const channel = useTelemetryChannel();
   const rig = useMemo(() => rigOf(show), [show]);
   const marks = useMemo(() => marksOf(show), [show]);
+  const marksRef = useRef(marks);
   // Which form sits beside the picture - client-local, like the camera.
   const [panel, setPanel] = useState<"place" | "calibrate">("place");
+  // The last spot of floor the operator clicked while calibrating: a mark to be.
+  const [spot, setSpot] = useState<FloorSpot | null>(null);
   const selectionList = useMemo(() => programmer?.selection ?? [], [programmer]);
   const selection = useMemo(() => new Set(selectionList), [selectionList]);
 
@@ -108,8 +112,9 @@ export function Viewer3D({
   const selectionRef = useRef<ReadonlySet<number>>(selection);
   useEffect(() => {
     rigRef.current = rig;
+    marksRef.current = marks;
     selectionRef.current = selection;
-  }, [rig, selection]);
+  }, [rig, marks, selection]);
 
   const [camera] = useState<Camera>(newCamera);
   // Client-local, like the camera (§4.2): how much this screen draws, and how
@@ -170,6 +175,7 @@ export function Viewer3D({
         sink: channel?.sink ?? null,
         stage,
         rig: () => rigRef.current,
+        marks: () => marksRef.current,
         selection: () => selectionRef.current,
         camera,
         haze: () => hazeRef.current,
@@ -189,6 +195,7 @@ export function Viewer3D({
         sink: channel?.sink ?? null,
         surface,
         rig: () => rigRef.current,
+        marks: () => marksRef.current,
         selection: () => selectionRef.current,
         camera,
         scale: devicePixelRatio,
@@ -252,7 +259,11 @@ export function Viewer3D({
           data-testid="viewer-frame"
           title="Stand back far enough to see every fixture"
           onClick={() => {
-            frameAll(camera, rigRef.current.map((fixture) => fixture.position));
+            // The marks are part of the room (B70): stand back for them too.
+            frameAll(camera, [
+              ...rigRef.current.map((fixture) => fixture.position),
+              ...marksRef.current.map((mark) => mark.position),
+            ]);
           }}
         >
           Frame all
@@ -369,6 +380,15 @@ export function Viewer3D({
               PICK_RADIUS * ratio,
             );
             if (id === null || id === undefined) {
+              // On the floor, with the calibration panel open, a click is a
+              // place for a mark (B70); it fills the form and sends nothing.
+              if (panel === "calibrate") {
+                const lens = lensOf(camera, box.width, box.height);
+                const at = floorPoint(lens, event.clientX - box.left, event.clientY - box.top);
+                if (at !== null) {
+                  setSpot({ x: Math.round(at.x * 100) / 100, z: Math.round(at.z * 100) / 100, n: (spot?.n ?? 0) + 1 });
+                }
+              }
               return;
             }
             pick(shell, `Fixture ${String(id)}`, () => {
@@ -382,6 +402,7 @@ export function Viewer3D({
           marks={marks}
           programmer={programmer}
           selection={selectionList}
+          spot={spot}
           visible={panel === "calibrate"}
         />
       </div>

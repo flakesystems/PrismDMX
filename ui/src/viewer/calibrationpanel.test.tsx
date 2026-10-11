@@ -496,3 +496,44 @@ describe("the solution", () => {
     expect(within(screen.getByTestId("calibration-marks")).queryByTestId("calibration-sighting-1")).toBeNull();
   });
 });
+
+describe("a click on the floor of the picture", () => {
+  const press = (x: number, y: number): void => {
+    const canvas = screen.getByTestId("viewer-canvas");
+    canvas.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 800, bottom: 500, width: 800, height: 500, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    fireEvent.pointerDown(canvas, { clientX: x, clientY: y, pointerId: 1 });
+    fireEvent.pointerUp(canvas, { clientX: x, clientY: y, pointerId: 1 });
+  };
+  const value = (id: string): string => screen.getByTestId<HTMLInputElement>(id).value;
+
+  it("fills the place of a new mark, at height nought, and sends nothing", () => {
+    const { sent } = calibrating();
+    type("calibration-field-name", "Spike 9");
+    // Low in the picture is floor, whatever the view.
+    press(400, 440);
+    expect(Number.isFinite(Number(value("calibration-field-x")))).toBe(true);
+    expect(value("calibration-field-x")).not.toBe("");
+    expect(value("calibration-field-y")).toBe("0");
+    expect(value("calibration-field-z")).not.toBe("");
+    expect(value("calibration-field-name")).toBe("Spike 9");
+    expect(sent).toEqual([]);
+    // And the mark can then be added as it stands.
+    expect(isDisabled("calibration-save-mark")).toBe(false);
+  });
+
+  it("takes an edit in progress back to a new mark", () => {
+    calibrating();
+    click("calibration-edit-3");
+    press(400, 440);
+    expect(screen.getByTestId("calibration-form").textContent).toContain("New mark");
+  });
+
+  it("is not a place while the other panel is showing", () => {
+    calibrating();
+    click("viewer-panel-place");
+    press(400, 440);
+    click("viewer-panel-calibrate");
+    expect(value("calibration-field-x")).toBe("");
+  });
+});

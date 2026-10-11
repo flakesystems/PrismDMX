@@ -225,3 +225,39 @@ describe("the hull a beam is drawn as", () => {
     expect(corners).toEqual(new Set(["0,0", "10,0", "10,10", "0,10"]));
   });
 });
+
+describe("the stage marks (B70)", () => {
+  const mark = (id: number, name: string, position: V3) => ({ id, name, position });
+
+  it("draws a mark on the floor as a cross, with its name, and nothing for no marks", () => {
+    const bare = new RecordingView();
+    new Scene().draw(bare, rig, null, frontCamera(), new Set());
+    const marked = new RecordingView();
+    new Scene().draw(marked, rig, null, frontCamera(), new Set(), 1, [mark(1, "DS centre", v3(1, 0, -3))]);
+    // Two arms and no stem for a mark that is on the floor.
+    expect(marked.lines).toBe(bare.lines + 2);
+    const label = marked.labels.find((each) => each.text === "DS centre");
+    expect(label?.colour).toBe(INK.mark);
+    expect(bare.labels.some((each) => each.colour === INK.mark)).toBe(false);
+  });
+
+  it("puts the name above the cross, where the mark projects", () => {
+    const camera = frontCamera();
+    const surface = new RecordingView();
+    new Scene().draw(surface, rig, null, camera, new Set(), 1, [mark(2, "", v3(1, 0, -3))]);
+    const [x, y] = projected(camera, surface, v3(1, 0, -3));
+    const label = surface.labels.find((each) => each.text === "Mark 2");
+    // A little above the cross in space is a little off in x under perspective.
+    expect(Math.abs((label?.x ?? 0) - x)).toBeLessThan(1);
+    // Above on the screen is a smaller y.
+    expect(label?.y).toBeLessThan(y);
+  });
+
+  it("gives a mark above the floor a stem down to it", () => {
+    const flat = new RecordingView();
+    new Scene().draw(flat, rig, null, frontCamera(), new Set(), 1, [mark(1, "a", v3(4, 0, 2))]);
+    const raised = new RecordingView();
+    new Scene().draw(raised, rig, null, frontCamera(), new Set(), 1, [mark(1, "a", v3(4, 0.8, 2))]);
+    expect(raised.lines).toBe(flat.lines + 1);
+  });
+});
