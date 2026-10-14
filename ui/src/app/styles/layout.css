@@ -1,0 +1,329 @@
+/*
+ * The arrangement: four bands, and the canvas is the one that gives.
+ *
+ * The bands are a fixed height (`theme.css`) so selecting something never
+ * moves every window on the screen. `min-height: 0` on the canvas is not
+ * tidiness: a grid row's minimum is its content otherwise, and one long window
+ * would push the bands off the bottom of the screen.
+ */
+
+.desk {
+  position: relative;
+  height: 100%;
+  display: grid;
+  grid-template-rows: var(--header-height) minmax(0, 1fr) var(--command-height) var(--programmer-height);
+  overflow: hidden;
+}
+
+/* While disconnected there is a header and a message, and nothing else. */
+.desk:has(.not-connected) {
+  grid-template-rows: var(--header-height) minmax(0, 1fr);
+}
+
+.band {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: 0 var(--pad);
+  background: var(--panel);
+  border-color: var(--edge);
+  border-style: solid;
+  border-width: 0;
+  min-width: 0;
+}
+
+.dim {
+  color: var(--ink-dim);
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* ---- keys: one look for every button ------------------------------------ */
+
+.key {
+  padding: 4px 10px;
+  background: var(--panel-raised);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.key:hover:not(:disabled) {
+  border-color: var(--edge-lit);
+}
+
+.key:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Lit: a colour and a thicker edge, so it reads without colour too. */
+.key[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 0 -3px 0 var(--accent);
+  color: var(--accent);
+}
+
+.key-small {
+  padding: 0 6px;
+}
+
+.key-clear:not(:disabled) {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+/* ---- header ------------------------------------------------------------- */
+
+.header {
+  border-bottom-width: 1px;
+}
+
+.title {
+  font-weight: 700;
+  font-size: var(--text-large);
+  margin-right: var(--pad);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bad);
+}
+
+.status-connected .status-dot {
+  background: var(--ok);
+}
+
+.status-connecting .status-dot {
+  background: var(--warn);
+}
+
+/* Connected says itself with the light; the word is for the other states. */
+.status-connected .status-word {
+  display: none;
+}
+
+.viewbar {
+  flex: 1;
+  display: flex;
+  gap: var(--gap);
+  overflow: hidden;
+}
+
+/* ---- canvas and windows -------------------------------------------------- */
+
+.canvas {
+  position: relative;
+  overflow: hidden;
+}
+
+.canvas-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+}
+
+.window {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.window[data-focused="yes"] {
+  border-color: var(--accent);
+}
+
+.window-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px var(--pad);
+  background: var(--panel-raised);
+  border-bottom: 1px solid var(--edge);
+  font-weight: 700;
+}
+
+/* The only thing on the screen that scrolls. */
+.window-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--pad);
+}
+
+/* ---- command line -------------------------------------------------------- */
+
+.command {
+  border-top-width: 1px;
+}
+
+.command-prompt {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.command-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  background: var(--ground);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  font-size: var(--text-large);
+}
+
+.command-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ---- programmer band ----------------------------------------------------- */
+
+.programmer {
+  border-top-width: 1px;
+  align-items: stretch;
+  padding: var(--pad);
+  gap: calc(var(--pad) * 2);
+}
+
+.banks {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: var(--gap);
+  align-content: start;
+}
+
+.readings {
+  display: flex;
+  gap: calc(var(--pad) * 3);
+  margin: 0;
+}
+
+.readings dt {
+  color: var(--ink-dim);
+  font-size: var(--text-small);
+}
+
+.readings dd {
+  margin: 0;
+  font-size: var(--text-large);
+}
+
+/* ---- not connected, notices --------------------------------------------- */
+
+.not-connected {
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+
+.not-connected-title {
+  font-size: 24px;
+  color: var(--bad);
+  margin: 0;
+}
+
+.notices {
+  position: absolute;
+  right: var(--pad);
+  bottom: calc(var(--command-height) + var(--programmer-height) + var(--pad));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+  max-width: 40%;
+}
+
+.notice {
+  padding: 4px 8px;
+  background: var(--panel-raised);
+  border-left: 3px solid var(--accent);
+}
+
+.notice-Warn {
+  border-left-color: var(--warn);
+}
+
+.notice-Error {
+  border-left-color: var(--bad);
+}
+
+/* ---- example windows ----------------------------------------------------- */
+
+.pool {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: var(--gap);
+}
+
+.pool-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 6px;
+  background: var(--panel-raised);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+}
+
+.pool-number {
+  color: var(--ink-dim);
+  font-size: var(--text-small);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--ink-dim);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+/* ---- window chooser ------------------------------------------------------ */
+
+.picker {
+  position: absolute;
+  top: var(--pad);
+  right: var(--pad);
+  z-index: 10;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--gap);
+  padding: var(--pad);
+  background: var(--panel-raised);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+}

@@ -2,20 +2,19 @@
  * The entry point: one desk, one root, and the connection started.
  *
  * The desk is created outside React on purpose. It owns a socket and a
- * reconnect timer, and neither of those belongs to a component's lifetime —
- * `StrictMode` mounts every component twice in development, and a connection
- * that opened and closed with a component would open twice and leave one of
- * them behind.
+ * reconnect timer, and neither belongs to a component's lifetime — `StrictMode`
+ * mounts every component twice in development, and a connection that opened
+ * and closed with a component would open twice and leave one behind.
  */
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import App from "./App";
-import { createDesk } from "./desk";
-import "./index.css";
-import { DeskProvider } from "./store/context";
-import { TelemetryProvider } from "./telemetry/panel";
+import App from "./app/App";
+import "./app/styles/theme.css";
+import "./app/styles/base.css";
+import "./app/styles/layout.css";
+import { DeskProvider, createDesk } from "./core";
 
 const desk = createDesk();
 desk.start();
@@ -28,15 +27,7 @@ if (container === null) {
 createRoot(container).render(
   <StrictMode>
     <DeskProvider store={desk.store}>
-      {/*
-        The telemetry channel is handed to the tree as a *device* — a sink, and
-        the defaults for how to draw it — rather than as state. There is nothing
-        in it to subscribe to, which is `docs/IPC_PROTOCOL.md` §7's last
-        paragraph made impossible to break rather than merely written down.
-      */}
-      <TelemetryProvider channel={{ sink: desk.telemetry }}>
-        <App />
-      </TelemetryProvider>
+      <App />
     </DeskProvider>
   </StrictMode>,
 );

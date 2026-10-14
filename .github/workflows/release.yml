@@ -187,6 +187,7 @@ jobs:
         run: npm run lint
 
       - name: Test the interface
+        if: false # UI-REDESIGN - see ci.yml and ui/REDESIGN.md
         working-directory: ui
         run: npm run test
 
@@ -499,6 +500,7 @@ jobs:
         run: npm run lint
 
       - name: Test the interface
+        if: false # UI-REDESIGN - see ci.yml and ui/REDESIGN.md
         working-directory: ui
         run: npm run test
 

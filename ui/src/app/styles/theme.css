@@ -1,0 +1,47 @@
+/*
+ * The design tokens: every colour, size and font the interface uses.
+ *
+ * Change the look here, not in the components. If Tailwind is added later,
+ * these become the `@theme` block (Tailwind v4 reads CSS variables), so nothing
+ * written against them has to change — see `ui/REDESIGN.md`.
+ *
+ * A console is operated in a dark room beside a stage: the ground is dark and
+ * the readings are the bright thing on it. A state that matters at a glance
+ * (lit, held, running) gets a colour **and** a second signal — an edge, a
+ * marker — because a tired operator is not doing colour matching.
+ */
+
+:root {
+  /* surfaces */
+  --ground: #14161a;
+  --panel: #1c1f25;
+  --panel-raised: #242830;
+  --edge: #2b3038;
+  --edge-lit: #4b5563;
+
+  /* text */
+  --ink: #e8e9ec;
+  --ink-dim: #9aa0a8;
+
+  /* signals */
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --accent: #38bdf8;
+
+  /* type */
+  --font: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+  --text-size: 13px;
+  --text-small: 11px;
+  --text-large: 16px;
+
+  /* spacing and shape */
+  --gap: 6px;
+  --pad: 8px;
+  --radius: 3px;
+
+  /* the fixed bands around the canvas — fixed, so the canvas never jumps */
+  --header-height: 44px;
+  --command-height: 40px;
+  --programmer-height: 140px;
+}

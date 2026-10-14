@@ -1,0 +1,41 @@
+/*
+ * The page, and the one rule that makes it a device screen.
+ *
+ * `CLAUDE.md`: *built like an in-device screen, avoid scrolling outside the
+ * canvas*. So the page is exactly the height of the window, `#root` fills it,
+ * and `overflow: hidden` makes a layout mistake **visible** — something that
+ * does not fit is clipped and gets fixed, rather than quietly adding a
+ * scrollbar to a console. Whatever has to scroll does so inside a window.
+ */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  overflow: hidden;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font: var(--text-size) / 1.4 var(--font);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}

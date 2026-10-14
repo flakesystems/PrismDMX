@@ -42,6 +42,18 @@ Linux ones**; the Windows jobs ran about twenty minutes on every push. So:
 -   Do not add a Windows job, or a heavy job, to `ci.yml`. A new check belongs on
     Linux if Linux can answer it, and in `release.yml` if only Windows can.
 
+## UI redesign in progress (branch `claude/ui-redesign-typescript-setup-616i8n`)
+
+The owner is rebuilding the interface by hand. On this branch:
+
+-   The interface's **tests are switched off in CI on purpose** (`if: false # UI-REDESIGN`
+    in `ci.yml` and `release.yml`); the owner writes them at the end. Do not
+    switch them back on, and do not add UI tests, unless asked.
+-   `ui/src/core/` is the daemon connection (unchanged logic, moved), imported
+    through `ui/src/core/index.ts`; `ui/src/app/` is the new interface;
+    `ui/legacy/` is the old one, kept for reference and excluded from every gate.
+-   `ui/REDESIGN.md` is the owner's guide; keep it current when `core/` changes.
+
 ## Code Style & Architecture Guidelines
 
 ### Core Principles

@@ -1,5 +1,11 @@
 # `ui/` — the PrismDMX interface
 
+> **The interface is being rebuilt.** On this branch the old views live in
+> `legacy/` (reference only, not built), the connection to the daemon in
+> `src/core/`, and the new interface in `src/app/`. The interface's tests are
+> switched off in CI until the redesign is done. Start with
+> [`REDESIGN.md`](REDESIGN.md) (German): `npm run setup`, then `npm run dev:all`.
+
 React and TypeScript over Vite. It is the desk: the canvas, the windows, the
 executor and encoder bars, the command line and the settings window. It holds no
 state of its own — everything it draws comes from `prismd` over the protocol in
@@ -47,7 +53,7 @@ like a regression.
 ## Where the desktop shell fits
 
 The interface runs in two places: inside `crates/prism-app`, and in an ordinary
-browser. [`src/shell/bridge.ts`](src/shell/bridge.ts) is the whole of the
+browser. [`src/core/shell/bridge.ts`](src/core/shell/bridge.ts) is the whole of the
 difference — the file dialogues and the autostart entry, each answering *there is
 no shell* rather than throwing, so every panel works in both. Nothing else in
 here knows which one it is in.

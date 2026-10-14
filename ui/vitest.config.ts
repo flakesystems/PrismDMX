@@ -18,7 +18,10 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
-    setupFiles: ["src/testing/setup.ts"],
+    setupFiles: ["src/core/testing/setup.ts"],
+    // UI redesign: the interface's own tests are written at the end, so a run
+    // with none of them is a pass rather than an error (`ui/REDESIGN.md`).
+    passWithNoTests: true,
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     coverage: {
       provider: "v8",
@@ -31,7 +34,7 @@ export default defineConfig({
       exclude: [
         "src/bindings/**",
         "src/main.tsx",
-        "src/testing/**",
+        "src/core/testing/**",
         "src/**/*.test.ts",
         "src/**/*.test.tsx",
       ],

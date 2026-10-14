@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# The development daemon's data and demo show (`npm run daemon`)
+.dev-data
