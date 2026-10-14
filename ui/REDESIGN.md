@@ -45,6 +45,7 @@ ui/
 │   │   ├── index.ts      ← die EINE Import-Stelle für alles
 │   │   ├── hooks.ts      useShow, useSession, useProgrammer, useRunLine, …
 │   │   ├── model/        reine Hilfsfunktionen (Fenster, Views, Programmer, …)
+│   │   ├── telemetry/    Decoder für die DMX-Telemetrie-Frames (Monitor-Fenster)
 │   │   └── ipc/ store/ mirror/ log/ shell/   Interna
 │   └── app/              ← DEIN Bereich
 │       ├── App.tsx       die vier Bänder
@@ -54,6 +55,11 @@ ui/
 ├── scripts/              die npm-Skripte oben (Node, laufen auch unter Windows)
 └── legacy/               die alte Oberfläche, NUR zum Nachschlagen (wird nicht gebaut)
 ```
+
+**Nicht verschieben oder umbenennen:** `src/core/ipc/protocol.ts` und
+`src/core/telemetry/frame.ts`. Rust-Tests lesen genau diese Dateien ein und
+prüfen, dass Oberfläche und Daemon dasselbe Protokoll sprechen — eine
+verschobene Datei lässt den Rust-Teil der CI fehlschlagen.
 
 `legacy/` wird weder typgeprüft noch gelintet noch gebaut. Lösch den Ordner,
 sobald du ihn nicht mehr brauchst. Auf `master` ist die alte UI ohnehin erhalten.

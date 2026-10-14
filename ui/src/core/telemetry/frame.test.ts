@@ -22,7 +22,7 @@ import { describe, expect, it } from "vitest";
 // As text rather than as a module, for the reason `mirror/recording.test.ts`
 // gives: a 100 kB JSON import would give TypeScript a literal type with every
 // recorded payload in it.
-import recordingText from "../../tests/fixtures/telemetry-recording.json?raw";
+import recordingText from "../../../tests/fixtures/telemetry-recording.json?raw";
 
 import {
   CHANNELS_PER_UNIVERSE,

@@ -53,6 +53,9 @@ The owner is rebuilding the interface by hand. On this branch:
     through `ui/src/core/index.ts`; `ui/src/app/` is the new interface;
     `ui/legacy/` is the old one, kept for reference and excluded from every gate.
 -   `ui/REDESIGN.md` is the owner's guide; keep it current when `core/` changes.
+-   `crates/prism-ipc/tests/interface_{protocol,telemetry}.rs` `include_str!`
+    `ui/src/core/ipc/protocol.ts` and `ui/src/core/telemetry/frame.ts`; moving
+    either breaks clippy and the Rust tests.
 
 ## Code Style & Architecture Guidelines
 

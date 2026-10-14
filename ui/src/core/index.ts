@@ -58,3 +58,6 @@ export * from "./shell/fullscreen";
 // ---- logging: `console.log` is not allowed in this code base ----------------
 export { logger } from "./log/logger";
 export type { Logger } from "./log/logger";
+
+// ---- telemetry: the binary DMX-level frames a monitor window draws ---------
+export * from "./telemetry/frame";

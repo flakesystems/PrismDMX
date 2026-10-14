@@ -1,4 +1,4 @@
-//! The transcription check: `ui/src/ipc/protocol.ts` against this crate.
+//! The transcription check: `ui/src/core/ipc/protocol.ts` against this crate.
 //!
 //! # Why there is a hand-written TypeScript file at all
 //!
@@ -21,7 +21,7 @@
 use prism_ipc::{ClientKind, PROTOCOL_VERSION, RejectReason};
 
 /// The interface's transcription of `crates/prism-ipc/src/message.rs`.
-const PROTOCOL_TS: &str = include_str!("../../../ui/src/ipc/protocol.ts");
+const PROTOCOL_TS: &str = include_str!("../../../ui/src/core/ipc/protocol.ts");
 
 /// Every [`RejectReason`], with the spelling `serde` gives it.
 ///
@@ -76,7 +76,7 @@ fn the_interface_speaks_this_protocol_version() {
         PROTOCOL_TS.contains(&format!(
             "export const PROTOCOL_VERSION = {PROTOCOL_VERSION};"
         )),
-        "ui/src/ipc/protocol.ts does not speak version {PROTOCOL_VERSION}"
+        "ui/src/core/ipc/protocol.ts does not speak version {PROTOCOL_VERSION}"
     );
 }
 
@@ -85,7 +85,7 @@ fn the_interface_knows_every_refusal() {
     for (_, name) in reject_reasons() {
         assert!(
             PROTOCOL_TS.contains(&format!("\"{name}\",")),
-            "ui/src/ipc/protocol.ts has no RejectReason::{name}, so a daemon that sent one \
+            "ui/src/core/ipc/protocol.ts has no RejectReason::{name}, so a daemon that sent one \
              would be reported to the operator as an unreadable message"
         );
     }
@@ -136,7 +136,7 @@ fn the_interface_knows_every_client_kind_and_every_message() {
     for kind in client_kinds() {
         assert!(
             PROTOCOL_TS.contains(&format!("\"{kind}\"")),
-            "ui/src/ipc/protocol.ts has no ClientKind::{kind}"
+            "ui/src/core/ipc/protocol.ts has no ClientKind::{kind}"
         );
     }
 

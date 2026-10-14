@@ -1,4 +1,4 @@
-//! The transcription check: `ui/src/telemetry/frame.ts` against this crate.
+//! The transcription check: `ui/src/core/telemetry/frame.ts` against this crate.
 //!
 //! The same shape, and the same reason, as `interface_protocol.rs`. The
 //! telemetry layout is **this crate's** — `TELEMETRY_VERSION`,
@@ -16,7 +16,7 @@
 use prism_ipc::{TELEMETRY_HEADER_BYTES, TELEMETRY_VERSION};
 
 /// The interface's transcription of `crates/prism-ipc/src/telemetry.rs`.
-const FRAME_TS: &str = include_str!("../../../ui/src/telemetry/frame.ts");
+const FRAME_TS: &str = include_str!("../../../ui/src/core/telemetry/frame.ts");
 
 /// Channels in one universe, as `prism-domain` has it.
 const CHANNELS: usize = prism_domain::CHANNELS_PER_UNIVERSE as usize;
@@ -27,7 +27,7 @@ fn the_interface_reads_this_layout_version() {
         FRAME_TS.contains(&format!(
             "export const TELEMETRY_VERSION = {TELEMETRY_VERSION};"
         )),
-        "ui/src/telemetry/frame.ts does not read layout version {TELEMETRY_VERSION}"
+        "ui/src/core/telemetry/frame.ts does not read layout version {TELEMETRY_VERSION}"
     );
 }
 
@@ -45,7 +45,7 @@ fn the_interface_knows_the_shape_of_a_frame() {
     ] {
         assert!(
             FRAME_TS.contains(&format!("export const {name} = {value};")),
-            "ui/src/telemetry/frame.ts has no {name} = {value}"
+            "ui/src/core/telemetry/frame.ts has no {name} = {value}"
         );
     }
     assert!(
@@ -91,7 +91,7 @@ fn the_interface_knows_every_way_a_frame_can_be_refused() {
     for name in names {
         assert!(
             FRAME_TS.contains(&format!(r#""{name}""#)),
-            "ui/src/telemetry/frame.ts has no {name} fault, so a frame it cannot read \
+            "ui/src/core/telemetry/frame.ts has no {name} fault, so a frame it cannot read \
              would be reported as something else"
         );
     }
