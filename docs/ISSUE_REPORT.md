@@ -1,4 +1,4 @@
-# Issue Report — 2026-10-14
+# Issue Report — 2026-10-21
 
 Automatisch erstellter Bericht des Issue-Tracking-Laufs.
 
@@ -6,10 +6,11 @@ Automatisch erstellter Bericht des Issue-Tracking-Laufs.
 
 ## Überblick
 
-**Ein GitHub-Issue geschlossen** seit dem letzten Lauf (2026-10-11): **#42** —
-3D-Positionskalibrierung für Scheinwerfer (B70 — behoben in der Session vom 2026-10-11).
+**Keine Änderungen** seit dem letzten Lauf (2026-10-14).
 
-Keine neuen Issues seit dem letzten Lauf.
+Alle 17 GitHub-Issues sind weiterhin geschlossen. Keine neuen Issues, keine neuen
+nicht-automatisierten Kommentare auf geschlossenen Issues, die ein anhaltendes Problem
+anzeigen.
 
 ---
 
@@ -37,60 +38,47 @@ Keine neuen Issues seit dem letzten Lauf.
 
 ---
 
-## Dieser Lauf — Geschlossene Issues
+## Dieser Lauf — Geprüft
 
-### GitHub #42 → B70 — 3D-Positionskalibrierung für Scheinwerfer
+### Geschlossene Issues auf neue Kommentare geprüft
 
-- **Label:** enhancement
-- **ISSUES.md-Eintrag:** B70 — ✅ behoben (seit dem Calibration-Commit auf master, 2026-10-11)
-- **GitHub-Kommentar:** gepostet
-- **GitHub-Issue:** geschlossen
+Issues mit mehr als zwei Kommentaren oder aktuellen Änderungsdaten wurden gezielt geprüft:
 
-B70 war im letzten Lauf (2026-10-11) als offen gemeldet. Zwischen den Läufen wurde die
-Kalibrierungsfunktion implementiert und auf `master` gemergt; `docs/ISSUES.md` trägt den
-Eintrag jetzt als behoben. GitHub-Issue #42 wurde entsprechend geschlossen.
+- **#42** (B70 — zuletzt aktualisiert 2026-10-14): beide Kommentare von Claude, kein
+  Nutzer-Kommentar seit dem letzten Lauf.
+- **#41** (B68 — zuletzt aktualisiert 2026-10-03): beide Kommentare von Claude, kein
+  neuer Nutzer-Kommentar.
+- **#9** (B43/B54 — 5 Kommentare): der dritte Kommentar vom Nutzer (*"The folder doesnt
+  get created on installation"*) ist bekannt und wurde in B54 getrackt; B54 ist behoben.
+  Kein neuer Kommentar seit dem letzten Lauf.
+- **#2** (B38 — 3 Kommentare): erster Kommentar des Nutzers enthält nur Referenzlinks;
+  kein neues Problem.
 
-**Was umgesetzt wurde:** *Calibrate* im Viewer 3D: Marks als Show-Daten, Aim/Take-Workflow,
-Levenberg–Marquardt-Solver, Apply als ein Oops-Schritt, Qualitätsanzeige mit Ampel.
-Dokumentation: Bedienhandbuch Kapitel 8. Tests: `calibration.rs`, `ui/e2e/calibration.spec.ts`.
+Alle anderen Issues haben genau zwei Kommentare (Tracking-Kommentar + Fix-Kommentar von
+Claude) und wurden zuletzt vor dem 2026-09-20 aktualisiert — kein Handlungsbedarf.
 
-**Noch offen am Rig:** Kalibrierung noch nicht an einem echten Moving Head gefahren (`PROGRESS.md` §5).
+### docs/ISSUES.md
 
----
+Keine Änderungen erforderlich. B63 und B66 bleiben die einzigen offenen Einträge.
 
-## Geschlossene Issues — neue Kommentare geprüft
+### Bekannte-Fehler-Seiten
 
-Alle zuvor geschlossenen Issues (außer #42, das in diesem Lauf geschlossen wurde) wurden auf
-neue nicht-automatisierte Kommentare geprüft — keine gefunden, kein Issue wiedereröffnet.
+`docs/site/known-faults.en.md` und `docs/site/known-faults.de.md` sind aktuell:
 
----
+- **B63** und **B66** sind auf beiden Seiten aufgeführt ✓
+- **B65** ist auf beiden Seiten als „Fixed for the next release" eingetragen ✓
+- **B70** ist auf beiden Seiten als „Fixed for the next release" / „In der nächsten
+  Version behoben" eingetragen ✓
 
-## Änderungen an `docs/ISSUES.md`
-
-Keine Änderungen in diesem Lauf. B70 wurde bereits als Teil des Calibration-Commits auf
-`master` als behoben eingetragen.
-
----
-
-## Bekannte-Fehler-Seiten — Prüfung
-
-`docs/site/known-faults.en.md` und `docs/site/known-faults.de.md` wurden geprüft — keine
-Änderungen erforderlich:
-
-- **B63** und **B66** sind weiterhin offen und auf beiden Seiten aufgeführt ✓
-- **B70** ist auf beiden Seiten als „Fixed for the next release" / „In der nächsten Version
-  behoben" eingetragen ✓ (passt zum Status in ISSUES.md)
-
-Der Test `the_known_faults_page_lists_the_faults_that_are_open` sollte grün bleiben: die
-einzigen offenen ISSUES.md-Einträge (B63, B66) sind auf beiden Seiten genannt.
+Der Test `the_known_faults_page_lists_the_faults_that_are_open` sollte grün bleiben.
 
 ---
 
 ## Aktueller Stand
 
-**Stand 2026-10-14: 2 offene Einträge** — B63, B66.
+**Stand 2026-10-21: 2 offene Einträge** — B63, B66.
 
-- **67 behobene Einträge** (B70 kommt neu dazu).
+- **67 behobene Einträge**.
 - **69 Einträge gesamt** in `docs/ISSUES.md`.
 - B63 (Zeichnung des Pults im Controls-Menü) wartet auf eine eigene Session.
 - B66 (Mehrere Funktionen auf mehreren Tasten) wird vom Eigentümer selbst korrigiert.
@@ -99,5 +87,5 @@ einzigen offenen ISSUES.md-Einträge (B63, B66) sind auf beiden Seiten genannt.
 
 ## Vorheriger Lauf
 
-Der Lauf vom **2026-10-11** hatte ein neues Issue (#42 → B70). Stand zu dem Zeitpunkt:
-3 offene Einträge (B63, B66, B70).
+Der Lauf vom **2026-10-14** hatte ein geschlossenes Issue (#42 → B70). Stand zu dem
+Zeitpunkt: 2 offene Einträge (B63, B66).
