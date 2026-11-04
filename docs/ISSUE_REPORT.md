@@ -1,4 +1,4 @@
-# Issue Report — 2026-10-28
+# Issue Report — 2026-11-04
 
 Automatisch erstellter Bericht des Issue-Tracking-Laufs.
 
@@ -6,7 +6,7 @@ Automatisch erstellter Bericht des Issue-Tracking-Laufs.
 
 ## Überblick
 
-**Keine Änderungen** seit dem letzten Lauf (2026-10-21).
+**Keine Änderungen** seit dem letzten Lauf (2026-10-28).
 
 Alle 17 GitHub-Issues sind weiterhin geschlossen. Keine neuen Issues, keine neuen
 nicht-automatisierten Kommentare auf geschlossenen Issues, die ein anhaltendes Problem
@@ -80,7 +80,7 @@ Der Test `the_known_faults_page_lists_the_faults_that_are_open` sollte grün ble
 
 ## Aktueller Stand
 
-**Stand 2026-10-28: 2 offene Einträge** — B63, B66.
+**Stand 2026-11-04: 2 offene Einträge** — B63, B66.
 
 - **67 behobene Einträge**.
 - **69 Einträge gesamt** in `docs/ISSUES.md`.
@@ -91,5 +91,5 @@ Der Test `the_known_faults_page_lists_the_faults_that_are_open` sollte grün ble
 
 ## Vorheriger Lauf
 
-Der Lauf vom **2026-10-21** hatte keine Änderungen. Stand zu dem Zeitpunkt: 2 offene
+Der Lauf vom **2026-10-28** hatte keine Änderungen. Stand zu dem Zeitpunkt: 2 offene
 Einträge (B63, B66).
