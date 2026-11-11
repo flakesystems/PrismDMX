@@ -1,4 +1,4 @@
-# Issue Report — 2026-10-28
+# Issue Report — 2026-11-11
 
 Automatisch erstellter Bericht des Issue-Tracking-Laufs.
 
@@ -6,11 +6,11 @@ Automatisch erstellter Bericht des Issue-Tracking-Laufs.
 
 ## Überblick
 
-**Keine Änderungen** seit dem letzten Lauf (2026-10-21).
+**Keine Änderungen** seit dem letzten Lauf (2026-10-28).
 
-Alle 17 GitHub-Issues sind weiterhin geschlossen. Keine neuen Issues, keine neuen
-nicht-automatisierten Kommentare auf geschlossenen Issues, die ein anhaltendes Problem
-anzeigen.
+Alle 17 GitHub-Issues sind weiterhin geschlossen. Keine neuen offenen Issues, keine
+neuen nicht-automatisierten Kommentare auf geschlossenen Issues, die ein anhaltendes
+Problem anzeigen.
 
 ---
 
@@ -38,58 +38,21 @@ anzeigen.
 
 ---
 
-## Dieser Lauf — Geprüft
+## Neue Kommentare auf geschlossenen Issues
 
-### Offene GitHub-Issues
-
-Keine. Alle 17 Issues sind geschlossen.
-
-### Geschlossene Issues auf neue Kommentare geprüft
-
-Issues mit mehr als zwei Kommentaren oder aktuellen Änderungsdaten wurden gezielt geprüft:
-
-- **#42** (B70 — zuletzt aktualisiert 2026-10-14): beide Kommentare von Claude, kein
-  Nutzer-Kommentar seit dem letzten Lauf.
-- **#41** (B68 — zuletzt aktualisiert 2026-10-03): beide Kommentare von Claude, kein
-  neuer Nutzer-Kommentar.
-- **#9** (B43/B54 — 5 Kommentare): der dritte Kommentar vom Nutzer (*"The folder doesnt
-  get created on installation"*) ist bekannt und wurde in B54 getrackt; B54 ist behoben.
-  Kein neuer Kommentar seit dem letzten Lauf.
-- **#2** (B38 — 3 Kommentare): erster Kommentar des Nutzers enthält nur Referenzlinks;
-  kein neues Problem.
-
-Alle anderen Issues haben genau zwei Kommentare (Tracking-Kommentar + Fix-Kommentar von
-Claude) und wurden zuletzt vor dem 2026-09-20 aktualisiert — kein Handlungsbedarf.
-
-### docs/ISSUES.md
-
-Keine Änderungen erforderlich. B63 und B66 bleiben die einzigen offenen Einträge.
-
-### Bekannte-Fehler-Seiten
-
-`docs/site/known-faults.en.md` und `docs/site/known-faults.de.md` sind aktuell:
-
-- **B63** und **B66** sind auf beiden Seiten aufgeführt ✓
-- **B65** ist auf beiden Seiten als „Fixed for the next release" eingetragen ✓
-- **B70** ist auf beiden Seiten als „Fixed for the next release" / „In der nächsten
-  Version behoben" eingetragen ✓
-
-Der Test `the_known_faults_page_lists_the_faults_that_are_open` sollte grün bleiben.
+Geprüft wurden #42 (zuletzt aktiv 2026-10-14) und #41 (zuletzt aktiv 2026-10-03).
+Beide neuesten Kommentare stammen vom Account-Inhaber selbst — kein externer
+Nutzerkommentar, der auf ein anhaltendes Problem hinweist.
 
 ---
 
-## Aktueller Stand
+## Bekannte-Fehler-Seite
 
-**Stand 2026-10-28: 2 offene Einträge** — B63, B66.
-
-- **67 behobene Einträge**.
-- **69 Einträge gesamt** in `docs/ISSUES.md`.
-- B63 (Zeichnung des Pults im Controls-Menü) wartet auf eine eigene Session.
-- B66 (Mehrere Funktionen auf mehreren Tasten) wird vom Eigentümer selbst korrigiert.
+`docs/site/known-faults.en.md` und `docs/site/known-faults.de.md` sind aktuell.
+Kein Aktualisierungsbedarf.
 
 ---
 
-## Vorheriger Lauf
+## Fazit
 
-Der Lauf vom **2026-10-21** hatte keine Änderungen. Stand zu dem Zeitpunkt: 2 offene
-Einträge (B63, B66).
+Dieser Lauf ist ein Routinecheck ohne Handlungsbedarf.
