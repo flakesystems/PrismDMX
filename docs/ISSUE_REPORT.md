@@ -1,4 +1,4 @@
-# Issue Report — 2026-11-11
+# Issue Report — 2026-11-18
 
 Automatisch erstellter Bericht des Issue-Tracking-Laufs.
 
@@ -6,7 +6,7 @@ Automatisch erstellter Bericht des Issue-Tracking-Laufs.
 
 ## Überblick
 
-**Keine Änderungen** seit dem letzten Lauf (2026-10-28).
+**Keine Änderungen** seit dem letzten Lauf (2026-11-11).
 
 Alle 17 GitHub-Issues sind weiterhin geschlossen. Keine neuen offenen Issues, keine
 neuen nicht-automatisierten Kommentare auf geschlossenen Issues, die ein anhaltendes
@@ -40,9 +40,24 @@ Problem anzeigen.
 
 ## Neue Kommentare auf geschlossenen Issues
 
-Geprüft wurden #42 (zuletzt aktiv 2026-10-14) und #41 (zuletzt aktiv 2026-10-03).
-Beide neuesten Kommentare stammen vom Account-Inhaber selbst — kein externer
-Nutzerkommentar, der auf ein anhaltendes Problem hinweist.
+Geprüft: alle 17 Issues. Die zuletzt aktualisierten sind #42 (2026-10-14) und #41
+(2026-10-03) — beide vor dem letzten Lauf vom 2026-11-11. Keine neuen Kommentare
+externer Nutzer, die auf anhaltende Probleme hinweisen.
+
+---
+
+## Offene Einträge in ISSUES.md
+
+Zwei Einträge sind aktuell offen:
+
+- **B63** — Die Zeichnung des Pults im Controls-Menü ist falsch  
+  Schwere: ärgerlich. Erwartet eine eigene Session.
+
+- **B66** — Mehrere Funktionen liegen auf mehreren Tasten  
+  Schwere: Schönheitsfehler. Wird vom Eigentümer direkt korrigiert.
+
+Beide sind in `docs/site/known-faults.en.md` und `docs/site/known-faults.de.md`
+korrekt eingetragen — kein Aktualisierungsbedarf.
 
 ---
 
