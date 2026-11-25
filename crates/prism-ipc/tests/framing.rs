@@ -203,7 +203,7 @@ proptest! {
     /// The payloads, on their own, so a failure points at the domain rather than
     /// at the envelope.
     #[test]
-    fn every_command_survives_the_frame_it_travels_in(command: Command) {
+    fn every_command_survives_the_frame_it_travels_in(command in arb::command()) {
         prop_assert_eq!(round_trip(&command), command);
     }
 
