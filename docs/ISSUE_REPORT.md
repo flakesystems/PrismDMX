@@ -1,4 +1,4 @@
-# Issue Report — 2026-11-11
+# Issue Report — 2026-11-25
 
 Automatisch erstellter Bericht des Issue-Tracking-Laufs.
 
@@ -6,7 +6,7 @@ Automatisch erstellter Bericht des Issue-Tracking-Laufs.
 
 ## Überblick
 
-**Keine Änderungen** seit dem letzten Lauf (2026-10-28).
+**Keine Änderungen** seit dem letzten Lauf (2026-11-11).
 
 Alle 17 GitHub-Issues sind weiterhin geschlossen. Keine neuen offenen Issues, keine
 neuen nicht-automatisierten Kommentare auf geschlossenen Issues, die ein anhaltendes
@@ -40,16 +40,26 @@ Problem anzeigen.
 
 ## Neue Kommentare auf geschlossenen Issues
 
-Geprüft wurden #42 (zuletzt aktiv 2026-10-14) und #41 (zuletzt aktiv 2026-10-03).
-Beide neuesten Kommentare stammen vom Account-Inhaber selbst — kein externer
-Nutzerkommentar, der auf ein anhaltendes Problem hinweist.
+Geprüft wurden #42 (zuletzt aktiv 2026-10-14) und #41 (zuletzt aktiv 2026-10-03)
+sowie #9 (zuletzt aktiv 2026-09-20). Alle Kommentare stammen vom Account-Inhaber;
+kein externer Nutzerkommentar, der auf ein anhaltendes Problem hinweist.
+
+Die übrigen Issues (#1, #2, #3, #5, #8, #21, #23–#30) wurden nach dem letzten
+Lauf (2026-11-11) nicht aktualisiert.
+
+---
+
+## ISSUES.md
+
+Keine Änderungen nötig. Alle bekannten Issues sind korrekt erfasst und bewertet.
+Offene Einträge ohne GitHub-Issue: B52 (offen), B63 (offen), B66 (offen).
 
 ---
 
 ## Bekannte-Fehler-Seite
 
-`docs/site/known-faults.en.md` und `docs/site/known-faults.de.md` sind aktuell.
-Kein Aktualisierungsbedarf.
+`docs/site/known-faults.en.md` und `docs/site/known-faults.de.md` sind aktuell
+und stimmen mit ISSUES.md überein. Kein Aktualisierungsbedarf.
 
 ---
 
